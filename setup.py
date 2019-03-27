@@ -34,7 +34,6 @@ setup(
     # could also include long_description, download_url, classifiers, etc.
 )
 
-print('setup run successfully')
 
 
 
