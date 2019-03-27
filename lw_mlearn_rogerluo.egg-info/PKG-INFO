@@ -1,0 +1,13 @@
+Metadata-Version: 2.1
+Name: lw-mlearn-rogerluo
+Version: 0.0.1
+Summary: This is a machine learning Package based on sklearn estimator
+Home-page: https://github.com/rogerlwlw/lw-mlearn
+Author: rogerluo
+Author-email: coolww@outlook.com
+License: PSF
+Description: # lw-mlearn
+        
+Keywords: Machine learning,sklearn,pandas
+Platform: UNKNOWN
+Description-Content-Type: text/markdown
