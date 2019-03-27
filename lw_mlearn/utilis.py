@@ -81,7 +81,7 @@ def dec_iferror_getargs(func):
     ''' catch exceptions when calling func and return arguments input '''
 
     @wraps(func)
-    def wrapper(*args, **kwargs):  #1
+    def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
@@ -93,7 +93,3 @@ def dec_iferror_getargs(func):
                 func.__name__))
 
     return wrapper
-
-
-if __name__ == '__main__':
-    pass
