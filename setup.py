@@ -25,6 +25,7 @@ setup(
     install_requires=['sklearn-pandas', 
                       'scikit-learn', 
                       'pandas', 
+                      'matplotlib',
                       'yapf',
                       'xgboost'],
     description="This is a machine learning Package based on sklearn estimator", 
