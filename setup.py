@@ -21,7 +21,7 @@ with open("README.md", "r") as fh:
 setup(
     name="lw-mlearn-rogerluo",
     version=__version__,
-    packages=find_packages(include=['lw_mlearn']),
+    packages=find_packages(),
     install_requires=['sklearn-pandas', 
                       'scikit-learn', 
                       'pandas', 
@@ -36,5 +36,4 @@ setup(
     license="PSF",
     keywords=['Machine learning', 'sklearn', 'pandas'],
     url= 'https://github.com/rogerlwlw/lw-mlearn'
-    # could also include long_description, download_url, classifiers, etc.
 )
