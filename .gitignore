@@ -23,13 +23,14 @@
 *.estimator
 *.txt
 *.pyc
-*.egg-info
+
 
 
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
 #==============================================================================#
-build/
-dist/
+#build/
+#dist/
+#*.egg-info
 .cache/
 .idea/
 .pytest_cache/
