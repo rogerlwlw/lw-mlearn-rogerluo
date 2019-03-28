@@ -1,7 +1,7 @@
 #
 __version__ = '0.0.1'
 
-__all__ = ['lw_model', 'lw_preprocess', 'plotter', 'utilis']
+__all__ = ['lw_model', 'lw_preprocess']
 
 from . import *
 from . lw_model import ML_model
