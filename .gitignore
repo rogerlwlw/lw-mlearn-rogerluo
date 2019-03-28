@@ -21,7 +21,6 @@
 *.pkl
 *.model
 *.estimator
-*.txt
 *.pyc
 
 
