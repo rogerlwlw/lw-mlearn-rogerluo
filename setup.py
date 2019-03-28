@@ -16,27 +16,30 @@ for line in open('lw_mlearn/__init__.py'):
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
-               
+
 setup(
     name="lw-mlearn-rogerluo",
     version=__version__,
     packages=find_packages(),
-    inlcude_package_data=True,    
-    install_requires=['sklearn-pandas',
-                      'numpy>=1.15.0', 
-                      'pandas>=0.23.0',
-                      'scikit-learn>=0.20.0', 
-                      'scipy>=1.1.0',
-                      'matplotlib>=3.0.0',
-                      'yapf>=0.25.0',
-                      'xgboost>=0.81'],
+    inlcude_package_data=True,
+    install_requires=[
+        'sklearn-pandas', 
+        'numpy>=1.15.0', 
+        'pandas>=0.23.0',
+        'scikit-learn>=0.20.0', 
+        'scipy>=1.1.0', 
+        'matplotlib>=3.0.0',
+        'yapf>=0.25.0', 
+        'xgboost>=0.81'
+    ],
     author="rogerluo",
-    author_email="coolww@outlook.com",  
-    description="Machine learning automatic workflow based on sklearn estimator", 
-    long_description=long_description, 
-    long_description_content_type="text/markdown",   
+    author_email="coolww@outlook.com",
+    description=
+    "Machine learning automatic workflow based on sklearn estimator",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     license='GNU/LGPLv3',
-    url= 'https://github.com/rogerlwlw/lw-mlearn-rogerluo',
+    url='https://github.com/rogerlwlw/lw-mlearn-rogerluo',
     classifiers=[
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
@@ -47,8 +50,8 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Topic :: Scientific/Engineering :: Artificial Intelligence'
     ],
-    keywords=['pipeline optimization', 'hyperparameter optimization', 
-              'data science', 'machine learning', 'genetic programming', 
-              'evolutionary computation'],
-
+    keywords=[
+        'pipeline optimization', 'hyperparameter optimization', 'data science',
+        'machine learning', 'genetic programming', 'evolutionary computation'
+    ],
 )
