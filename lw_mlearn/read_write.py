@@ -41,7 +41,7 @@ class File(Desc):
     def __set__(self, instance, file):
 
         if os.path.isfile(file):
-            self._x = file
+            self._x = os.path.abspath(file)
         else:
             raise TypeError("file '{}' does not exist".format(file))
 
@@ -127,17 +127,16 @@ class Reader():
             - file to read
         '''
         self.file_ = file
-        file = os.path.relpath(self.file_)
-        read_api = _rd_apis(file)
-
+        read_api = _rd_apis(self.file_)
+        rel_file = os.path.relpath(self.file_)
         try:
             kw = get_kwargs(read_api, **kwargs)
             rst = read_api(file, **kw)
-            print("<obj>: '{}' read from '{}...\n".format(
-                rst.__class__.__name__, file))
+            print("<obj>: '{}' read from '{}\n".format(
+                rst.__class__.__name__, rel_file))
             return rst
         except Exception as e:
-            print("<failure>: 'file' read failed...\n".format(file))
+            print("<failure>: 'file' read failed".format(rel_file))
             print(repr(e), '\n')
 
     def read_all(self, suffix=None, subfolder=False, **kwargs):
@@ -397,4 +396,4 @@ if __name__ == '__main__':
     o.write(a, 'atest.model')
     o.write(df, 'test.xlsx', sheet_name=['sheet'])
     b = o.read_all()
-#    o._remove_path()
+    o._remove_path()
