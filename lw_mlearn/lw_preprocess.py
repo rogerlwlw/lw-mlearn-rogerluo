@@ -14,14 +14,16 @@ from pandas.core.dtypes import api
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder)
+from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder,
+                                   PolynomialFeatures)
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.dummy import DummyClassifier
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.svm import LinearSVC
-from sklearn.feature_selection import SelectFromModel
+from sklearn.feature_selection import (SelectFromModel, GenericUnivariateSelect, 
+                                       chi2, f_classif, mutual_info_classif,
+                                       RFE)
 from sklearn.decomposition import PCA
 from sklearn.utils import validation
+from sklearn.utils.testing import all_estimators
 
 from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
@@ -31,70 +33,89 @@ from lw_mlearn.plotter import plotter_rateVol
 from lw_mlearn.read_write import Path
 
 
-def pipe_main(pipe_name):
-    ''' return pipeline instance by given key names
+def pipe_main(pipe=None):
+    '''pipeline construction using sklearn estimators (classifiers)
     
-    pipe_name: 
-        str        
-    transformer:
-       ' woe' --> study iv & woe of each feature, plot lift curve of 
-       each feature   
-    estimator:
-        'xgb' --> return xgboost estimator pipeline
-        
-        'dummy' --> return dummy estimator pipeline
-        
     .. note::
-        all pipe_estimator starts with clean_oht/clean_ordi transformer which
-        cleans data and encodes categorical features
-        
+        data flows through a pipeline consists of steps as below:
+            raw data --> clean --> encoding --> feature construction 
+            --> feature selection --> final estimator
+            see scikit-learn preprocess & estimators
+    parameter
+    ----
+    pipe - str 
+        - in format of 'xx_xx' of which 'xx' means steps in pipeline,
+          default None
+    return
+    ----
+        1) pipeline instance of chosen steps
+        2) a dict indicating possible choice of 'steps', if pipe is None,
     '''
-    # --transformer
-    oht = Cat_encoder(encode_type='oht')
-    ordi = Cat_encoder(encode_type='ordi')
-    notdate_dtype = Split_cls()
+    clean = {'clean': Split_cls('not_datetime')}
+    # 1
+    encode = {
+        'oht': Cat_encoder(encode_type='oht'),
+        'ordi': Cat_encoder(encode_type='ordi'),
+        'woe': Woe_encoder(max_leaf_nodes=5)
+    }
+    # 2 feature construction
+    feature_c = {'pca': PCA(n_components='mle'), 
+                 'poly': PolynomialFeatures(degree=2)}
+    # 3 select from model
+    feature_m = {
+        'fsvc':
+        SelectFromModel(LinearSVC(C=0.01, penalty="l1", dual=False)),
+        'fxgb':
+        SelectFromModel(XGBClassifier(n_jobs=-1), threshold=1e-5),
+        'fcart':
+        SelectFromModel(
+            DecisionTreeClassifier(min_impurity_decrease=0.01),
+            threshold=1e-5),
+        'fwoe':
+        SelectFromModel(Woe_encoder(max_leaf_nodes=5), threshold=0.019),
+        'fRFExgb' : RFE(XGBClassifier(n_jobs=-1, importance_type='gain'),
+                        step=0.1),
+        'fRFEsvc' : RFE(LinearSVC(), step=0.1)        
+    }
+    # 3 Univariate feature selection
+    feature_u = {'fchi2' : GenericUnivariateSelect(chi2, 'percentile',10),
+                 'fMutualclf' : GenericUnivariateSelect(mutual_info_classif,
+                                                    'percentile', 10),
+                'fFclf' : GenericUnivariateSelect(f_classif, 'percentile', 10),
+                 }
+    # 4 sklearn estimator
+    t = all_estimators(type_filter=['classifier'])
+    estimator = {i[0]: i[1]() for i in t}
+    estimator.update(XGBClassifier=XGBClassifier())
 
-    # -- to start with
-    clean_oht = [('clean', notdate_dtype), ('cat_enc', oht)]
-    clean_ordi = [('clean', notdate_dtype), ('cat_enc', ordi)]
-    # --feature select from svc model with l1 penalty
-    woe = Pipeline([('clean', notdate_dtype), ('woe', Woe_encoder())])
-    pca = PCA(n_components='mle')
-    l1_s = SelectFromModel(LinearSVC(C=0.01, penalty="l1", dual=False))
-    xgb_s = SelectFromModel(XGBClassifier(n_jobs=-1), threshold=1e-5)
-
-    # --estimator
-    dummy = DummyClassifier(random_state=0)
-    cart = DecisionTreeClassifier(max_depth=3, min_samples_leaf=0.02)
-    LRcv = LogisticRegressionCV(cv=5)
-    LR = LogisticRegression()
-    xgb = XGBClassifier(n_jobs=-1)
-
-    # --pipeline
-    pipe_dummy = Pipeline(clean_oht + [('dummy', dummy)])
-    
-    pipe_xgbs_xgb = Pipeline(clean_oht + [('feature_xgb', xgb_s), ('xgb',
-                                                                   xgb)])
-    pipe_l1s_xgb = Pipeline(clean_oht + [('feature_l1', l1_s), ('xgb', xgb)])
-    
-    pipe_xgb = Pipeline(clean_oht + [('xgb', xgb)])
-    pipe_cart = Pipeline(clean_oht + [('cart', cart)])
-
-    pipe_LR = Pipeline(clean_oht + [('LR', LR)])
-    pipe_l1s_LRcv = Pipeline(clean_oht + [('feature_l1', l1_s), ('LR', LRcv)])
-
-    # --
-    pipe = locals().get(pipe_name)
     if pipe is None:
-        raise ValueError('no estimator returned')
-    return pipe
+        feature_s = {}
+        feature_s.update(**feature_m, **feature_u)
+        return {
+            'clean': clean.keys(),
+            'encoding': encode.keys(),
+            'feature_c': feature_c.keys(),
+            'feature_s': feature_s.keys(),
+            'estimator': estimator.keys()
+        }
+    elif isinstance(pipe, str):
+        l = pipe.split('_')
+        all_keys_dict = {}
+        all_keys_dict.update(**clean, **encode, **feature_c, **feature_m,
+                             **feature_u, **estimator)
+        if len(l) > 1:
+            steps = [(i, all_keys_dict.get(i)) for i in l
+                     if all_keys_dict.get(i) is not None]
+            return Pipeline(steps)
+        else:
+            return all_keys_dict.get(pipe)
+    else:
+        raise ValueError("input pipe must be a string in format 'xx[_xx]'")
 
 
 class Base_clean():
     '''base cleaner
 
-    X
-        - data X will be converted as DataFrame
     attributes
     -----
     out_labels
@@ -120,6 +141,8 @@ class Base_clean():
         '''convert X to DataFrame, drop duplicated cols, try converting X
         to numeric or datetime or object dtype
         
+        X
+            - data X will be converted as DataFrame        
         return --> cleaned df
         '''
         try:
@@ -179,7 +202,8 @@ class Base_clean():
 
 
 class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
-    '''filter columns of specific dtypes, store input & output columns  
+    '''clean(convert to numeric/str); filter columns of specific dtypes; 
+    store input & output columns; drop all na columns  
     
     params
     ---- 
@@ -189,7 +213,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         - obj - filter only obj dtype
         - datetime - filter only datetime dtype
         - not_datetime - exclude only datetime dtype
-        - otherwise - all dtypes
+        - all - all dtypes
     na
         - fill na with 'na' value, -999 default
     ----
@@ -200,7 +224,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         L = locals().copy()
         L.pop('self')
         self.set_params(**L)
-
+               
     def fit(self, X, y=None):
         '''fit input_labels & out_labels 
         '''
@@ -208,7 +232,15 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         # drop na columns
         na_col = X.columns[X.apply(lambda x: all(x.isna()))]
         X.dropna(axis=1, how='all', inplace=True)
-        # --
+        
+        # drop uid cols
+        uid_col = []
+        for k, col in X.iteritems():
+            if (api.is_object_dtype(col) or api.is_integer_dtype(col)) \
+            and len(pd.unique(col)) > 0.8*len(col):            
+                 X.drop(k, axis=1, inplace=True) 
+                 uid_col.append(k)
+        # filter dtypes
         options = {
             'not_datetime': X.select_dtypes(exclude='datetime'),
             'number': X.select_dtypes(include='number'),
@@ -216,12 +248,15 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
             'datetime': X.select_dtypes(include='datetime'),
             'all': X
         }
-
         self.out_labels = options.get(self.dtype_filter).columns.tolist()
+       
         # --
         if len(na_col) > 0:
             print('{} of columns are null , have been dropped \n'.format(
-                len(na_col)))
+                na_col))
+        if len(uid_col) > 0:
+            print('{} of columns are uid , have been dropped \n'.format(
+                uid_col))
 
         if self.verbose > 0:
             for k, i in options.items():
@@ -367,7 +402,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
                  input_edges={},
                  q=None,
                  bins=None,
-                 max_leaf_nodes=5,
+                 max_leaf_nodes=None,
                  min_samples_leaf=0.1,
                  min_samples_split=0.1,
                  criterion='gini',
@@ -413,7 +448,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         # --
         params = get_kwargs(_woe_binning, **self.get_params())
         params.update(get_kwargs(DecisionTreeClassifier, **self.get_params()))
-        self.edges = _woe_binning(X, y, **params)       
+        self.edges = _woe_binning(X, y, **params)
         self.edges.update(self.input_edges)
         # --
         df_binned = self._get_binned(X)
@@ -504,10 +539,10 @@ def _tree_univar_bin(arr_x, arr_y, **kwargs):
     return
     ----
     ndarray of binning edges
-    '''  
+    '''
     validation.check_consistent_length(arr_x, arr_y)
-    clf = DecisionTreeClassifier(**get_kwargs(DecisionTreeClassifier, 
-                                              **kwargs))
+    clf = DecisionTreeClassifier(
+        **get_kwargs(DecisionTreeClassifier, **kwargs))
     X = np.array(arr_x).reshape(-1, 1)
     Y = np.array(arr_y).reshape(-1, 1)
 
@@ -547,7 +582,7 @@ def bin_tree(X,
              max_leaf_nodes=10,
              min_samples_leaf=0.05,
              random_state=0,
-             verbose=1,
+             verbose=0,
              **kwargs):
     '''discrete features based on univariate run of DecisionTree classifier
     (CART tree - gini impurity as criterion, not numeric dtype will be igored,
@@ -571,9 +606,6 @@ def bin_tree(X,
         - dict of {'col_name' : bin_edges }
     '''
 
-    print('---' * 20)
-    print('begin fit binning_tree...')
-
     bin_edges = {}
     cols = []
     un_split = []
@@ -594,22 +626,23 @@ def bin_tree(X,
                 un_split.append(name)
         else:
             cols.append(name)
-    msg1 = '''total of {2} unchaged (unique counts less 
-              than {1} or categorical dtype) =\n "{0}" 
-           '''.format(pd.Index(cols), cat_num_lim, len(cols))
-    msg2 = '''total of {1} unsplitable features = \n {0} ...
-           '''.format(pd.Index(un_split), len(un_split))
-    msg3 = 'total of {} bin_edges obtained'.format(len(bin_edges))
+
     if verbose > 0:
+        msg1 = '''total of {2} unchaged (unique counts less 
+               than {1} or categorical dtype) =\n "{0}" 
+               '''.format(pd.Index(cols), cat_num_lim, len(cols))
+        msg2 = '''total of {1} unsplitable features = \n {0} ...
+               '''.format(pd.Index(un_split), len(un_split))
+        msg3 = 'total of {} bin_edges obtained \n'.format(len(bin_edges))
         if cols:
             print(msg1)
         if un_split:
             print(msg2)
         if bin_edges:
             print(msg3)
-    print('complete ...\n')
 
     return bin_edges
+
 
 def _binning(y_pre=None,
              bins=None,
@@ -678,10 +711,16 @@ def _binning(y_pre=None,
         y_pre, bins, duplicates='drop', retbins=True, labels=labels)
     return y_bins, bins
 
-def _woe_binning(X, y, q=None, bins=None, max_leaf_nodes=None,
-                 cat_num_lim=5, **kwargs):
+
+def _woe_binning(X,
+                 y,
+                 q=None,
+                 bins=None,
+                 max_leaf_nodes=None,
+                 cat_num_lim=5,
+                 **kwargs):
     '''use by Woe_encoder
-    '''    
+    '''
     bin_edges = {}
     for name, col in X.iteritems():
         col_notna = col.dropna()
@@ -689,7 +728,7 @@ def _woe_binning(X, y, q=None, bins=None, max_leaf_nodes=None,
         if (len(pd.unique(col_notna)) > cat_num_lim
                 and api.is_numeric_dtype(col_notna)):
             label, bin_edges[name] = _binning(
-                    col_notna, bins, q, max_leaf_nodes, y_notna, **kwargs)
+                col_notna, bins, q, max_leaf_nodes, y_notna, **kwargs)
     return bin_edges
 
 
@@ -761,7 +800,6 @@ def calc_woe(df_binned, y):
     '''
 
     print('---' * 20)
-    print("begin woe calculation ...")
     l = []
     woe_map = {}
     iv = []
@@ -944,17 +982,3 @@ class Tree_embedding(BaseEstimator, TransformerMixin, Base_clean):
         X_tr = encoder.transform(X_app)
 
         return X_tr
-
-
-if __name__ == '__main__':
-    arr_x = np.random.randn(10000)
-    arr_z = np.random.choice(['A', 'B', 'C', 'D', 'E'], 10000)
-    arr_z = arr_z.astype(object)
-    arr_z[100:340] = np.nan
-    arr_y = np.random.randint(2, size=10000)
-    df = pd.DataFrame({'x': arr_x, 'y': arr_y, 'z': arr_z, 'z2': arr_z})
-    y = df.pop('y')
-    a = pipe_main('woe')
-    a.named_steps.woe.max_leaf_nodes=None
-    a.named_steps.woe.bins=10
-    print(a.fit(df, y))
