@@ -32,5 +32,3 @@ def get_flat_list(x):
         return [a for i in x for a in get_flat_list(i)]
     else:
         return [x]
-
-
