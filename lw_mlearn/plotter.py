@@ -472,13 +472,3 @@ def annotate(x, y, ax):
     '''
     if api.is_list_like(x):
         [ax.annotate('(%.2f)' % y, (i, j)) for i, j in zip(x, y)]
-
-
-if __name__ == '__main__':
-    df = pd.DataFrame({
-        'x': list('ABCDEFGHIJ'),
-        'y1': np.random.randint(1, 100, 10),
-        'y2': np.random.randint(100, 200, 10)
-    })
-
-    plotter_rateVol(df)
