@@ -132,8 +132,8 @@ class Reader():
         try:
             kw = get_kwargs(read_api, **kwargs)
             rst = read_api(file, **kw)
-            print("<obj>: '{}' read from '{}\n".format(
-                rst.__class__.__name__, rel_file))
+            print("<obj>: '{}' read from '{}\n".format(rst.__class__.__name__,
+                                                       rel_file))
             return rst
         except Exception as e:
             print("<failure>: 'file' read failed".format(rel_file))
@@ -387,13 +387,3 @@ def traverse_all_dirs(rootDir):
                      for dirpath, dirnames, filenames in os.walk(rootDir)
                      for file in filenames)
     return file_dict
-
-
-if __name__ == '__main__':
-    o = Objs_management('test')
-    a = [1, 2, 3]
-    df = pd.DataFrame([[1, 2], [4, 3]])
-    o.write(a, 'atest.model')
-    o.write(df, 'test.xlsx', sheet_name=['sheet'])
-    b = o.read_all()
-    o._remove_path()
