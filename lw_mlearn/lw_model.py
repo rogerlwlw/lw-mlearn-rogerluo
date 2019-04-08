@@ -612,14 +612,14 @@ class ML_model(BaseEstimator):
             # save (X, y) data
             title = title if title is not None else 0
             folder.write(train_set, 'data/train_data_{}.pkl'.format(title))
-            
+
             cv_score = self.cv_validate(X, y,
                                         **get_kwargs(self.cv_validate, **L),
                                         **kwargs)
             folder.write([lift_data[-1], cv_score],
                          'spreadsheet/train_{}.xlsx'.format(title),
                          sheet_name=['liftcurve', 'train_score'])
-            folder.write(traincv[-1], 
+            folder.write(traincv[-1],
                          'spreadsheet/train_datasplits_{}.xlsx'.format(title))
 
     def run_test(self,
@@ -661,7 +661,7 @@ class ML_model(BaseEstimator):
             print('test cv_score & cv_splits test data are being saved... ')
             title = title if title is not None else 0
             folder.write(test_set, 'data/test_data_{}.pkl'.format(title))
-            folder.write(testcv[-1], 
+            folder.write(testcv[-1],
                          'spreadsheet/test_datasplits.xlsx'.format(title))
             # test scores
             scores = self.test_score(X_test, y_test, cv=cv, scoring=scoring)
@@ -674,7 +674,7 @@ class ML_model(BaseEstimator):
                         param_grid,
                         refit='roc_auc',
                         scoring=[
-                            'roc_auc', 'neg_log_loss', 'average_precision', 
+                            'roc_auc', 'neg_log_loss', 'average_precision',
                             'balanced_accuracy'
                         ],
                         fit_params={},
@@ -908,14 +908,3 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_test
     if ret_type == 'train':
         return data_splits_train
-
-
-if __name__ == '__main__':
-    from sklearn.datasets import make_classification
-    # Import some data to play with
-    X, y = make_classification(10000)
-    # test
-    E = ML_model(estimator='pipe_l1s_LRcv', path='../tests')
-    E.run_train((X, y), q=20, title='train')
-    E.run_test((X, y), title='test')
-    E.save_estimator()
