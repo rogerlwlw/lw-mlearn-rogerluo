@@ -8,7 +8,6 @@ import pandas as pd
 import os
 import pickle
 import shutil
-import matplotlib.pyplot as plt
 
 from sklearn.utils import check_consistent_length
 from lw_mlearn.utilis import get_flat_list, get_kwargs
@@ -41,7 +40,7 @@ class File(Desc):
     def __set__(self, instance, file):
 
         if os.path.isfile(file):
-            self._x = os.path.abspath(file)
+            self._x = os.path.relpath(file)
         else:
             raise TypeError("file '{}' does not exist".format(file))
 
@@ -49,8 +48,8 @@ class File(Desc):
         '''remove file
         '''
         os.remove(self._x)
-        print("file '{}' removed".format(self._x))
-        del self._x
+        print("info: file '{}' removed".format(self._x))
+
 
 
 class NewFile(File):
@@ -62,12 +61,12 @@ class NewFile(File):
         try:
             if os.path.isfile(file):
                 os.remove(file)
-                print("old file '{}' deleted...\n ".format(file))
+                print("info: old file '{}' deleted...\n ".format(file))
 
             dirs, filename = os.path.split(file)
             if not os.path.exists(dirs) and len(dirs) > 0:
                 os.makedirs(dirs, exist_ok=True)
-                print("path '{}' created...\n".format(dirs))
+                print("info: path '{}' created...\n".format(dirs))
             self._x = file
         except Exception as e:
             print(repr(e))
@@ -81,8 +80,8 @@ class Path(Desc):
         try:
             if not os.path.exists(path):
                 os.makedirs(path, exist_ok=True)
-                print("path '{}' created...".format(path))
-            self._x = os.path.abspath(path)
+                print("info: path '{}' created...".format(path))
+            self._x = os.path.relpath(path)
         except Exception as e:
             print(repr(e))
             raise TypeError("invalid path input '%s' " % path)
@@ -93,8 +92,8 @@ class Path(Desc):
             for i in file:
                 os.remove(os.path.join(root, i))
         shutil.rmtree(self._x, ignore_errors=True)
-        print("path '{}' removed...".format(self._x))
-        del self._x
+        print("info: path '{}' removed... \n".format(self._x))
+
 
 
 class Reader():
@@ -116,7 +115,6 @@ class Reader():
         ''' init path variable 
         '''
         self.path_ = path
-        self.obj_collections = _Obj()
 
     def read(self, file, **kwargs):
         '''return obj from file
@@ -128,31 +126,39 @@ class Reader():
         '''
         self.file_ = file
         read_api = _rd_apis(self.file_)
-        rel_file = os.path.relpath(self.file_)
         try:
             kw = get_kwargs(read_api, **kwargs)
-            rst = read_api(file, **kw)
+            rst = read_api(self.file_, **kw)
             print("<obj>: '{}' read from '{}\n".format(rst.__class__.__name__,
-                                                       rel_file))
+                                                       self.file_))
             return rst
         except Exception as e:
-            print("<failure>: 'file' read failed".format(rel_file))
+            print("<failure>: 'file' read failed".format(self.file_))
             print(repr(e), '\n')
 
-    def read_all(self, suffix=None, subfolder=False, **kwargs):
-        '''return generator of read in objs, and collect them
-        in obj_collection obj as attributes
+    def read_all(self, suffix=None, path=None, subfolder=False, **kwargs):
+        '''return generator of read in objs, and obj that collects them 
+        as attributes
+        
+        suffix: file suffix to read
+        path: relative path to read from, default current self.path_
         '''
-        file_dict = _get_files(self.path_, suffix, subfolder)
+        if path is None:
+            path = self.path_
+        else:
+            path = os.path.join(self.path_, path)
+            
+        file_dict = _get_files(path, suffix, subfolder)
 
+        obj = _Obj()
         for k, v in file_dict.items():
             load = self.read(v, **kwargs)
             if load is not None:
-                setattr(self.obj_collections, k.replace('.', '_'), load)
+                setattr(obj, k.replace('.', '_'), load)
 
         gen = (self.read(v, **kwargs) for v in file_dict.values()
                if self.read(v, **kwargs) is not None)
-        return gen
+        return gen, obj
 
 
 def _load_pkl(file):
@@ -169,7 +175,6 @@ def _read_file(file):
     '''
     with open(file, 'r') as f:
         obj = f.read()
-        print("read 'str' in '{}'  successfully ...".format(file))
     return obj
 
 
@@ -197,7 +202,8 @@ def _get_files(dirpath, suffix=None, subfolder=False):
 
 
 def _rd_apis(file):
-    '''return read api of given suffix of file
+    '''return read api for given suffix of file, default _load_pkl will be
+    used
     
     api parameters
     ----
@@ -210,14 +216,10 @@ def _rd_apis(file):
         '.csv': pd.read_csv,
         '.txt': _read_file,
         '.sql': _read_file,
-        '.pkl': _load_pkl,
-        '.model': _load_pkl
     }
 
     suffix = os.path.splitext(file)[1]
     rst = api_collections.get(suffix, _load_pkl)
-    if rst is None:
-        print("'read api' for {} not available... ".format(suffix))
     return rst
 
 
@@ -261,7 +263,7 @@ class Writer():
 
 
 def _wr_apis(file):
-    ''' return write api of given suffix of file
+    ''' return write api of given suffix of file, default will use _dump_pkl
     
     api parameters
     ---
@@ -272,8 +274,6 @@ def _wr_apis(file):
     **kwargs
     '''
     api_collections = {
-        '.pkl': _dump_pkl,
-        '.model': _dump_pkl,
         '.xlsx': _dump_df_excel,
         '.csv': _dump_df_csv,
         '.pdf': _save_plot,
@@ -282,8 +282,6 @@ def _wr_apis(file):
 
     suffix = os.path.splitext(file)[1]
     rst = api_collections.get(suffix, _dump_pkl)
-    if not rst:
-        print("write api for '{}' not available... ".format(suffix))
     return rst
 
 
@@ -327,7 +325,6 @@ def _dump_df_excel(obj, file, **kwargs):
             data.to_excel(writer, **kw)
         except Exception as e:
             print(repr(e))
-            print('data obj is not DataFrame convertible')
             continue
     writer.save()
 
@@ -340,16 +337,12 @@ def _dump_df_csv(obj, file, index=False, **kwargs):
         data.to_csv(file, index=index, **get_kwargs(data.to_csv, **kwargs))
     except Exception as e:
         print(repr(e))
-        print('data obj is not DataFrame convertible')
 
 
 def _save_plot(fig, file, **kwargs):
     '''save the figure obj , if fig is None, save the current figure
     '''
     fig.savefig(file, **kwargs)
-    plt.show()
-    plt.close(fig)
-
 
 class Objs_management(Reader, Writer):
     def __init__(self, path):
