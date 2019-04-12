@@ -15,7 +15,9 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder,
-                                   PolynomialFeatures)
+                                   PolynomialFeatures, StandardScaler, 
+                                   MinMaxScaler, RobustScaler, Normalizer,
+                                   QuantileTransformer, PowerTransformer)
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import LinearSVC
 from sklearn.feature_selection import (SelectFromModel, GenericUnivariateSelect, 
@@ -34,34 +36,44 @@ from lw_mlearn.read_write import Path
 
 
 def pipe_main(pipe=None):
-    '''pipeline construction using sklearn estimators (classifiers)
+    '''pipeline construction using sklearn estimators, final step support only
+    classifiers currently
     
     .. note::
-        data flows through a pipeline consists of steps as below:
-            raw data --> clean --> encoding --> feature construction 
+        data flows through a pipeline consisting of steps as below:
+            raw data --> clean --> encoding --> scaling --> feature construction 
             --> feature selection --> final estimator
             see scikit-learn preprocess & estimators
     parameter
     ----
     pipe - str 
-        - in format of 'xx_xx' of which 'xx' means steps in pipeline,
+        - in the format of 'xx_xx' of which 'xx' means steps in pipeline,
           default None
     return
     ----
         1) pipeline instance of chosen steps
-        2) a dict indicating possible choice of 'steps', if pipe is None,
+        2) if pipe is None, a dict indicating possible choice of 'steps'
     '''
     clean = {'clean': Split_cls('not_datetime')}
-    # 1
+    # 
     encode = {
         'oht': Cat_encoder(encode_type='oht'),
         'ordi': Cat_encoder(encode_type='ordi'),
-        'woe': Woe_encoder(max_leaf_nodes=5)
+        'woe': Woe_encoder(max_leaf_nodes=5),
     }
-    # 2 feature construction
-    feature_c = {'pca': PCA(n_components='mle'), 
+    
+    scale = {
+        'stdscale' : StandardScaler(),
+        'maxscale' : MinMaxScaler(),
+        'rscale' : RobustScaler(quantile_range=(10,90)),
+        'qauntile' : QuantileTransformer(), # uniform distribution
+        'power' :  PowerTransformer(), # Gaussian distribution
+        'norm' : Normalizer(),
+            }
+    # feature construction
+    feature_c = {'pca': PCA(n_components='mle', whiten=True), 
                  'poly': PolynomialFeatures(degree=2)}
-    # 3 select from model
+    # select from model
     feature_m = {
         'fsvc':
         SelectFromModel(LinearSVC(C=0.01, penalty="l1", dual=False)),
@@ -73,17 +85,16 @@ def pipe_main(pipe=None):
             threshold=1e-5),
         'fwoe':
         SelectFromModel(Woe_encoder(max_leaf_nodes=5), threshold=0.019),
-        'fRFExgb' : RFE(XGBClassifier(n_jobs=-1, importance_type='gain'),
-                        step=0.1),
+        'fRFExgb' : RFE(XGBClassifier(n_jobs=-1), step=0.1),
         'fRFEsvc' : RFE(LinearSVC(), step=0.1)        
     }
-    # 3 Univariate feature selection
-    feature_u = {'fchi2' : GenericUnivariateSelect(chi2, 'percentile',10),
+    # Univariate feature selection
+    feature_u = {'fchi2' : GenericUnivariateSelect(chi2, 'percentile', 20),
                  'fMutualclf' : GenericUnivariateSelect(mutual_info_classif,
-                                                    'percentile', 10),
-                'fFclf' : GenericUnivariateSelect(f_classif, 'percentile', 10),
+                                                    'percentile', 20),
+                'fFclf' : GenericUnivariateSelect(f_classif, 'percentile', 20),
                  }
-    # 4 sklearn estimator
+    # sklearn estimator
     t = all_estimators(type_filter=['classifier'])
     estimator = {i[0]: i[1]() for i in t}
     estimator.update(XGBClassifier=XGBClassifier())
@@ -94,6 +105,7 @@ def pipe_main(pipe=None):
         return {
             'clean': clean.keys(),
             'encoding': encode.keys(),
+            'scale' : scale.keys(),
             'feature_c': feature_c.keys(),
             'feature_s': feature_s.keys(),
             'estimator': estimator.keys()
@@ -101,17 +113,68 @@ def pipe_main(pipe=None):
     elif isinstance(pipe, str):
         l = pipe.split('_')
         all_keys_dict = {}
-        all_keys_dict.update(**clean, **encode, **feature_c, **feature_m,
-                             **feature_u, **estimator)
-        if len(l) > 1:
-            steps = [(i, all_keys_dict.get(i)) for i in l
-                     if all_keys_dict.get(i) is not None]
-            return Pipeline(steps)
-        else:
-            return all_keys_dict.get(pipe)
+        all_keys_dict.update(**clean, **encode, **scale, **feature_c, 
+                             **feature_m, **feature_u, **estimator)         
+        steps = []
+        for i in l:
+            if all_keys_dict.get(i) is not None:
+                steps.append((i, all_keys_dict.get(i)))
+            else:
+                raise ValueError(
+                    "'{}' is not valid key for sklearn estimators".format(i))
+        return Pipeline(steps)
+                
     else:
         raise ValueError("input pipe must be a string in format 'xx[_xx]'")
 
+def _param_grid(estimator):
+    '''    
+    estimator:
+        str for sklearn estimator's name
+    '''    
+    XGBClassifier = [
+            {'reg_alpha': [1, 4, 8, 10, 15]},
+            {'reg_lamdbda': [1, 4, 8, 10, 15]},
+            {'min_child_weight': [0.1, 2, 4, 5, 8]},
+            {'scale_pos_weight': [0.1, 5, 10, 15, 20]},
+            {'max_depth': [2, 3, 4]},
+            {'n_estimator' : [50, 80, 100, 120, 150, 180, 200]},
+            {'learning_rate': [ 0.05, 0.08, 0.1, 0.12, 0.15]}
+    ]
+    
+    SVC = [
+        {'kernel' : ['linear', 'poly', 'sigmoid', 'rbf']},
+        {'C' : np.logspace(-3, 3, 10)},
+        {'gamma': np.logspace(-3, 1, 10)},
+    ]
+    param_grids = locals().copy()            
+    grid = param_grids.get(estimator)
+    if grid is not None:
+        return grid
+    else:
+        raise ValueError('no param_grid returned')
+
+def pipe_grid(estimator, pipe_grid=False):
+    '''return saved param_grid of given estimator
+    
+    estimator
+        - str or sklearn estimator instance
+    pipe_grid
+        - bool, False return param_grid; True return param_grid as embedded
+        in pipeline    
+    '''
+    if isinstance(estimator, str):
+        keys = estimator
+    else:
+        keys = estimator.__class__.__name__
+        
+    param_grid = _param_grid(keys)
+    if pipe_grid is True:
+        param_grid = [
+            {'__'.join([keys, k]): i.get(k) for k in i.keys()}
+            for i in param_grid if api.is_dict_like(i)
+        ]
+    return param_grid
 
 class Base_clean():
     '''base cleaner
