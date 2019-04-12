@@ -21,8 +21,8 @@ from sklearn.metrics import auc, roc_curve
 from lw_mlearn.utilis import get_flat_list, get_kwargs
 #
 plt.style.use('seaborn')
-plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']  #指定中文字符
-plt.rcParams['axes.unicode_minus'] = False  #指定负号输出字符
+plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']  #Chinese font
+plt.rcParams['axes.unicode_minus'] = False  
 plt.rcParams.update({
     'figure.dpi': 90.0,
     'font.size': 10.0,
@@ -262,6 +262,9 @@ def plotter_cv_results_(results,
         if len(param_array) == 1:
             df.index = results[param_array[0]]
             xlabel = param_array[0]
+            num_param = api.is_numeric_dtype(df.index)
+            if not num_param:                
+                df.index = np.arange(len(df.index))
         else:
             xlabel = 'n_iteration'
 
@@ -289,6 +292,7 @@ def plotter_cv_results_(results,
         ax0.axvline(x_max, linestyle='--', marker='x', color='y')
         ax0.annotate("%0.4f" % best_score, (x_max, best_score))
         plt.setp(ax0, ylabel=s)
+    
     # set title
     ax[0].set_title(title, fontsize=13)
     # use fig legend
@@ -309,7 +313,8 @@ def plotter_rateVol(df,
                     ylim=(0, None),
                     ymajor_formatter='percent',
                     xlabel_position='bottom',
-                    xlabelrotation=30):
+                    xlabelrotation=30,
+                    anno=False):
     ''' plot rate along with volume
     
     df - 3 cols [D1, rate, denominator]
@@ -361,7 +366,7 @@ def plotter_rateVol(df,
     axe.yaxis.set_major_formatter(fmt)
     axe.xaxis.set_label_position(xlabel_position)
     if labels.astype(str).apply(len).max() > 8:
-        axe.tick_params('x', labelrotation=xlabelrotation)
+        axe.tick_params('x', labelrotation=xlabelrotation)    
     # set axe_right attr
     axe_right.set_ylabel(vol.name)
     axe_right.grid(False)
@@ -373,7 +378,8 @@ def plotter_rateVol(df,
         xycoords='data',
         textcoords='axes fraction',
         bbox=bbox)
-
+    if anno is True:
+        _annotate(rate.index.values, rate.values, axe)
     # get legends
     fig.legend(bbox_to_anchor=(1, 1), ncol=2, fontsize='medium')
     plt.tight_layout(pad=1.08, rect=(0, 0, 1, 0.98))
@@ -467,8 +473,63 @@ def get_font_dict():
     return font
 
 
-def annotate(x, y, ax):
+def _annotate(x, y, ax):
     ''' plot annotate
     '''
     if api.is_list_like(x):
-        [ax.annotate('(%.2f)' % y, (i, j)) for i, j in zip(x, y)]
+        for i, j in zip(x, y):            
+            ax.annotate(s='%.1f%%' % (100*j), 
+                        xy=(i, j),
+                        xytext=(10, 10),
+                        textcoords='offset pixels') 
+    return ax
+                     
+def make_meshgrid(x, y, h=.02):
+    """Create a mesh of points to plot in
+
+    Parameters
+    ----------
+    x: data to base x-axis meshgrid on
+    y: data to base y-axis meshgrid on
+    h: stepsize for meshgrid, optional
+
+    Returns
+    -------
+    xx, yy : ndarray
+    """
+    x_min, x_max = x.min() - 1, x.max() + 1
+    y_min, y_max = y.min() - 1, y.max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                         np.arange(y_min, y_max, h))
+    return xx, yy
+
+
+def plotter_contours(ax, clf, x, y, h=0.02, pre_method='predict', pos_label=1, 
+                  **params):
+    """Plot the decision boundaries for a classifier.
+
+    Parameters
+    ----------
+    ax: matplotlib axes object
+    clf: a classifier
+    x: data to base x-axis meshgrid on
+    y: data to base y-axis meshgrid on
+    pos_label: index of predicted class
+    params: dictionary of params to pass to contourf, optional
+    """
+    xx, yy = make_meshgrid(x, y, h)
+    pre = getattr(clf, pre_method)
+    if pre is not None:
+        Z = pre(np.c_[xx.ravel(), yy.ravel()])
+    if np.ndim(Z) > 1:
+        Z = Z[:, pos_label]
+              
+    Z = Z.reshape(xx.shape)
+    out = ax.contourf(xx, yy, Z, **params)
+    return out
+
+if __name__ == '__main__':
+   df = pd.DataFrame({'X' : ['A', 'B', 'C', 'D', 'E'], 
+                      'rate' : np.random.rand(5), 
+                      'vol' : np.random.randint(1000, size=5)})
+   plotter_rateVol(df)
