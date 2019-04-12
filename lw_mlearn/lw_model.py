@@ -15,8 +15,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-import lw_mlearn.lw_preprocess as lw_pre
-
 from scipy import interp
 from sklearn.utils import validation
 from sklearn.base import clone, BaseEstimator, is_classifier, is_regressor
@@ -27,11 +25,10 @@ from sklearn.model_selection import _validation
 from sklearn.metrics import roc_curve, auc
 from sklearn.pipeline import Pipeline
 
-from lw_mlearn.lw_preprocess import _binning
 from lw_mlearn.utilis import get_flat_list, get_kwargs
 from lw_mlearn.plotter import plotter_rateVol, plotter_auc, plotter_cv_results_
 from lw_mlearn.read_write import Objs_management
-
+from lw_mlearn.lw_preprocess import pipe_main, pipe_grid, _binning
 from functools import wraps
 from shutil import rmtree
 
@@ -98,15 +95,15 @@ class ML_model(BaseEstimator):
 
         if estimator is not None:
             if isinstance(estimator, str):
-                self.estimator = lw_pre.pipe_main(estimator)
+                self.estimator =  pipe_main(estimator)
             elif hasattr(estimator, '_estimator_type'):
                 self.estimator = estimator
             else:
                 raise ValueError('invalid estimator input')
         else:
             try:
-                self.estimator = next(
-                    self.folder.read_all(suffix='.estimator'))
+                gen, _ = self.folder.read_all(suffix='.estimator')
+                self.estimator = next(gen)
                 print('estimator {} has been read from {}'.format(
                     self.estimator.__class__.__name__, self.path_))
             except Exception as e:
@@ -131,7 +128,7 @@ class ML_model(BaseEstimator):
             ['classes_', 'coef_', 'feature_importances_', 'booster', 'tree_'],
             all_or_any=any)
 
-    def _get_predictions(self, estimator, X):
+    def _pre_continueous(self, estimator, X):
         '''make continueous predictions
         '''
         classes_ = getattr(estimator, 'classes_')
@@ -148,13 +145,6 @@ class ML_model(BaseEstimator):
             raise ValueError('estimator have no continuous predictions')
         return y_pre
 
-    def read_objs(self, suffix='.pkl'):
-        '''return obj  which has attributes of  read in unpickled objs from
-        self.path_, usually contain 'estimator', 'train/test data'
-        '''
-        folder = self.folder
-        gen = folder.read_all(suffix=suffix, subfolder=True)
-        return gen
 
     def plot_auc_test(self,
                       X,
@@ -163,7 +153,7 @@ class ML_model(BaseEstimator):
                       groups=None,
                       title=None,
                       ax=None,
-                      save_fig=True):
+                      save_fig=False):
         '''plot roc_auc curve for given fitted estimator, must have continuous
         predictons (decision_function or predict_proba) to evaluate model by
         roc_auc metrics(iterables of X, y can be passed or X, y 
@@ -215,7 +205,7 @@ class ML_model(BaseEstimator):
         for i in range(len(X)):
             x0 = X[i]
             y0 = y[i]
-            y_pre = self._get_predictions(estimator, x0)
+            y_pre = self._pre_continueous(estimator, x0)
             fpr, tpr, threshhold = roc_curve(y0, y_pre, drop_intermediate=True)
             fprs.append(fpr)
             tprs.append(tpr)
@@ -245,6 +235,7 @@ class ML_model(BaseEstimator):
             else:
                 plot_name = 'plots/roc_test.pdf'
             self.folder.write(plt.gcf(), plot_name)
+            plt.close()
         return ax, np.mean(aucs), np.std(aucs), data_splits
 
     def plot_auc_traincv(self,
@@ -254,7 +245,7 @@ class ML_model(BaseEstimator):
                          groups=None,
                          title=None,
                          ax=None,
-                         save_fig=True,
+                         save_fig=False,
                          **fit_params):
         '''fit & plot roc_auc of an estimator, must have continuous
         predictons (to assess hyper parameter settings performance)
@@ -290,7 +281,7 @@ class ML_model(BaseEstimator):
             _split_cv(X, y=y, cv=cv, groups=groups, random_state=self.seed))
         for x_set, y_set in data_splits:
             clf.fit(x_set[0], y_set[0], **fit_params)
-            y_pre = self._get_predictions(clf, x_set[1])
+            y_pre = self._pre_continueous(clf, x_set[1])
             fpr, tpr, threshhold = roc_curve(
                 y_set[1], y_pre, drop_intermediate=True)
             tprs.append(interp(mean_fpr, fpr, tpr))
@@ -321,6 +312,7 @@ class ML_model(BaseEstimator):
             else:
                 plot_name = 'plots/roc_train.pdf'
             self.folder.write(plt.gcf(), plot_name)
+            plt.close()
         return ax, mean_auc, std_auc, _get_splits_combined(data_splits)
 
     def plot_lift(self,
@@ -333,7 +325,7 @@ class ML_model(BaseEstimator):
                   labels=False,
                   ax=None,
                   title=None,
-                  save_fig=True,
+                  save_fig=False,
                   **tree_kwargs):
         '''plot list curve of (X, y) data, update self bins
         
@@ -372,7 +364,7 @@ class ML_model(BaseEstimator):
 
         self._check_fitted(self.estimator)
         estimator = self.estimator
-        y_pre = self._get_predictions(estimator, X)
+        y_pre = self._pre_continueous(estimator, X)
 
         if use_self_bins is True:
             if self.estimator.bins is not None:
@@ -402,14 +394,12 @@ class ML_model(BaseEstimator):
         self.estimator.bins = bins
 
         if save_fig is True:
-            if isinstance(title, str):
-                plot_name = 'plots/lift_' + title + '.pdf'
-            else:
-                plot_name = 'plots/lift.pdf'
-            self.folder.write(plt.gcf(), plot_name)
+            title = 0 if title is None else str(title)
+            self.folder.write(plt.gcf(), 'plots/lift_{}.pdf'.format(title))
+            plt.close()
         return ax, plotted_data
 
-    def plot_gridcv(self, title=None):
+    def plot_gridcv(self, title=None, save_fig=False):
         '''plot grid seatch cv results
         '''
         header = '-'.join([_get_estimator_name(self.estimator), 'gridcv'])
@@ -422,6 +412,14 @@ class ML_model(BaseEstimator):
         else:
             plotter_cv_results_(self.gridcv_results, title=header)
 
+        if save_fig is True:
+            if isinstance(title, str):
+                plot_name = 'plots/gridcv_' + title + '.pdf'
+            else:
+                plot_name = 'plots/gridcv.pdf'
+            self.folder.write(plt.gcf(), plot_name)
+            plt.close()
+        
     @wraps(cross_val_score)
     def cv_score(self, X, y, scoring='roc_auc', cv=5, **kwargs):
         '''
@@ -555,6 +553,8 @@ class ML_model(BaseEstimator):
             decision_function]
         pre_level: bool
              if true, output score as integer 
+        pos_label
+            index of predicted class
         '''
         estimator = self.estimator
         pre_func = getattr(estimator, pre_method)
@@ -565,22 +565,21 @@ class ML_model(BaseEstimator):
         if np.ndim(y_pre) > 1:
             y_pre = y_pre[:, pos_label]
         if pre_level:
-            y_pre, bins = _binning(
+            y_pre, bins =  _binning(
                 y_pre, bins=self.estimator.bins, labels=False)
         return y_pre
 
     def run_train(self,
                   train_set,
                   scoring=[
-                      'roc_auc', 'average_precision', 'neg_log_loss',
-                      'balanced_accuracy'
-                  ],
+                      'roc_auc', 'average_precision'],
                   cv=5,
                   q=None,
                   bins=None,
                   max_leaf_nodes=None,
                   fit_params={},
                   title=None,
+                  save_fig=True,
                   **kwargs):
         '''run train performance of an esimator, dump: [plots/spreadsheets] to 
         self.path_
@@ -611,7 +610,7 @@ class ML_model(BaseEstimator):
             print('train data & cv_score & cv_splits data are being saved...')
             # save (X, y) data
             title = title if title is not None else 0
-            folder.write(train_set, 'data/train_data_{}.pkl'.format(title))
+            folder.write(train_set, 'data/train_{}.data'.format(title))
 
             cv_score = self.cv_validate(X, y,
                                         **get_kwargs(self.cv_validate, **L),
@@ -630,10 +629,9 @@ class ML_model(BaseEstimator):
                  max_leaf_nodes=None,
                  use_self_bins=True,
                  scoring=[
-                     'roc_auc', 'average_precision', 'neg_log_loss',
-                     'balanced_accuracy'
-                 ],
+                     'roc_auc', 'average_precision'],
                  title=None,
+                 save_fig=True,
                  **kwargs):
         '''run test performance of an estimator, dump: [plots/spreadsheet] to 
         self.path_    
@@ -660,7 +658,7 @@ class ML_model(BaseEstimator):
         if self.verbose > 0:
             print('test cv_score & cv_splits test data are being saved... ')
             title = title if title is not None else 0
-            folder.write(test_set, 'data/test_data_{}.pkl'.format(title))
+            folder.write(test_set, 'data/test_{}.data'.format(title))
             folder.write(testcv[-1],
                          'spreadsheet/test_datasplits.xlsx'.format(title))
             # test scores
@@ -673,11 +671,10 @@ class ML_model(BaseEstimator):
                         train_set,
                         param_grid,
                         refit='roc_auc',
-                        scoring=[
-                            'roc_auc', 'neg_log_loss', 'average_precision',
-                            'balanced_accuracy'
-                        ],
+                        scoring=['roc_auc', 'average_precision'],
                         fit_params={},
+                        save_fig=True,
+                        title=None,
                         **kwargs):
         '''run sensitivity of param_grid space, dump plots/spreadsheets
         
@@ -707,14 +704,15 @@ class ML_model(BaseEstimator):
                 param_grid=grid,
                 **get_kwargs(self.grid_searchcv, **L),
                 **kwargs)
-            self.plot_gridcv()
-            folder.write(plt.gcf(), 'plots/gridcv_%s.pdf' % i)
+            self.plot_gridcv(save_fig=save_fig, title=str(i))
             cv_results.append(self.gridcv_results)
+       
+        print('sensitivity results & data are being saved... ')
+        title = 0 if title is None else str(title)
+        folder.write(cv_results, 
+                     'spreadsheet/sensitivity_{}.xlsx'.format(title))
+        folder.write(train_set, 'data/sensitivity_{}.data'.format(title))
 
-        folder.write(cv_results, 'spreadsheet/sensitivity.xlsx')
-        folder.write(train_set, 'data/train_data.pkl')
-
-        self.fit(X, y, **fit_params)
         self.save_estimator()
         self._shut_temp_folder()
 
@@ -727,7 +725,13 @@ class ML_model(BaseEstimator):
                      _get_estimator_name(self.estimator) + '.estimator')
         folder.write(self.get_params(),
                      _get_estimator_name(self.estimator) + 'ML_parameters.pkl')
+        
         folder.write(self, self.__class__.__name__ + '.model')
+    
+    def delete_model(self):
+        '''delete self.path folder containing model
+        '''
+        del self.folder.path_
 
     @property
     def feature_names(self):  #need update
@@ -795,11 +799,17 @@ def _split_cv(*arrays, y=None, groups=None, cv=3, random_state=None):
     n - indice of variable/arrays [0 : n_arrays-1]
     k - indice of train(0)/test[1] set [0:1]
     '''
+
     n_arrays = len(arrays)
     if n_arrays == 0:
         raise ValueError("At least one array required as input")
     validation.check_consistent_length(*arrays, y, groups)
     arrays = list(arrays)
+    
+    if cv == 1:
+        if y is not None: 
+            arrays.append(y)
+        return [[(i, i) for i in arrays]]
     # get cross validator
     if y is not None:
         arrays.append(y)
@@ -868,7 +878,7 @@ def plotter_lift_curve(y_pre,
     xlabel
         - xlabel for xaxis
     '''
-    y_cut, bins = _binning(
+    y_cut, bins =  _binning(
         y_pre,
         y_true=y_true,
         bins=bins,
@@ -908,3 +918,18 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_test
     if ret_type == 'train':
         return data_splits_train
+    
+if __name__ == '__main__':
+    from sklearn.datasets import make_classification
+    # Import some data to play with
+    X, y = make_classification(1000)
+    # test
+    E = ML_model(estimator='clean_SVC', path='../tests_model')
+    E.run_train((X, y), q=5, save_fig=True)
+    E.run_test((X, y), save_fig=True)
+    E.run_sensitivity((X,y), pipe_grid('SVC', True), 
+                      cv=3, save_fig=True)
+    E.save_estimator()
+#    E.delete_model()
+
+    
