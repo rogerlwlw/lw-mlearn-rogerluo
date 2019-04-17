@@ -20,6 +20,7 @@ from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder,
                                    QuantileTransformer, PowerTransformer)
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import LinearSVC
+from sklearn.linear_model import SGDClassifier
 from sklearn.feature_selection import (SelectFromModel, GenericUnivariateSelect, 
                                        chi2, f_classif, mutual_info_classif,
                                        RFE)
@@ -77,6 +78,8 @@ def pipe_main(pipe=None):
     feature_m = {
         'fsvc':
         SelectFromModel(LinearSVC(C=0.01, penalty="l1", dual=False)),
+        'fSGD':
+        SelectFromModel(SGDClassifier(penalty="l1")),
         'fxgb':
         SelectFromModel(XGBClassifier(n_jobs=-1), threshold=1e-5),
         'fcart':
@@ -137,15 +140,22 @@ def _param_grid(estimator):
             {'reg_lamdbda': [1, 4, 8, 10, 15]},
             {'min_child_weight': [0.1, 2, 4, 5, 8]},
             {'scale_pos_weight': [0.1, 5, 10, 15, 20]},
-            {'max_depth': [2, 3, 4]},
-            {'n_estimator' : [50, 80, 100, 120, 150, 180, 200]},
-            {'learning_rate': [ 0.05, 0.08, 0.1, 0.12, 0.15]}
+            {'max_depth': [2, 3]},
+            {'n_estimator' : np.linspace(50, 300, 5).astype(int)},
+            {'learning_rate': np.logspace(-3, 0, 5)}
     ]
     
     SVC = [
         {'kernel' : ['linear', 'poly', 'sigmoid', 'rbf']},
         {'C' : np.logspace(-3, 3, 10)},
         {'gamma': np.logspace(-3, 1, 10)},
+    ]
+    SGDClassifier = [
+            {'loss' : ['hinge', 'log', 'perceptron']},
+            {'penalty' : ['l2', 'l1', 'elasticnet']},
+            {'alpha' : np.logspace(-5, -1, 5)},
+            {'learning_rate' : [ 'adaptive', 'optimal', 'constant'], 
+             'eta0' : [0.01]},
     ]
     param_grids = locals().copy()            
     grid = param_grids.get(estimator)
@@ -160,7 +170,7 @@ def pipe_grid(estimator, pipe_grid=False):
     estimator
         - str or sklearn estimator instance
     pipe_grid
-        - bool, False return param_grid; True return param_grid as embedded
+        - bool, if False return param_grid; True return param_grid as embedded
         in pipeline    
     '''
     if isinstance(estimator, str):
