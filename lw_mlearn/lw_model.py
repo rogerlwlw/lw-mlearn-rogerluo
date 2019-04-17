@@ -36,6 +36,27 @@ from shutil import rmtree
 class ML_model(BaseEstimator):
     '''quantifying predictions of an estimator
     
+    parameters
+    ---
+    estimator
+        - sklearn estimator or pipeline instance
+    path
+        - dir to place model, default model
+    seed
+        - random state seed, 0 default
+    
+    
+    attributes
+    -----
+    path_
+        - directory to read/dump object from 
+    gridcv_results
+        - cv_results after running grid_searchcv
+    folder
+        - read_write object to load/dump datafiles from self.path_
+    estimator.bins
+        - bin edges of predictions of estimator
+    
     method
     ----
     cv_score:
@@ -59,15 +80,6 @@ class ML_model(BaseEstimator):
         plot lift curve of model
     plot_gridcv:
         plot  grid seach cv results of model
-    
-    attributes
-    -----
-    estimator:
-        - input estimator to evaluate
-    bins
-        - binning edges of estimator predictions
-    gridcv_results
-        - cv_results after running grid_searchcv
     '''
 
     def __init__(self,
@@ -140,9 +152,12 @@ class ML_model(BaseEstimator):
             y_pre = method(X)
         elif hasattr(estimator, 'predict_proba'):
             method = getattr(estimator, 'predict_proba')
-            y_pre = method(X)[:, self.pos_label]
+            y_pre = method(X)
         else:
             raise ValueError('estimator have no continuous predictions')
+        
+        if np.ndim(y_pre) > 1: 
+                y_pre = y_pre[:, self.pos_label]
         return y_pre
 
 
@@ -163,8 +178,6 @@ class ML_model(BaseEstimator):
             -2D array or list of 2D ndarrays
         y
             -binary or list of class labels
-        pos_label
-            - positive label default 1
         cv 
             -int, cross-validation generator or an iterable
             - if cv>1, generate splits by StratifyKfold method
@@ -180,7 +193,6 @@ class ML_model(BaseEstimator):
         L = locals().copy()
         L.pop('self')
         estimator = self.estimator
-        pos_label = self.pos_label
         # split test set by cv
         if cv > 1:
             xs = []
@@ -455,7 +467,7 @@ class ML_model(BaseEstimator):
         return pd.DataFrame(cv_results)
 
     def test_score(self, X, y, cv, scoring):
-        '''return test scores of estimator
+        '''return test scores of estimator 
         '''
         # test scores
         data_splits = _split_cv(X, y=y, cv=cv, random_state=self.seed)
@@ -549,10 +561,10 @@ class ML_model(BaseEstimator):
         '''return predictions of estimator
         
         pre_method: str
-            sklearn estimator method name, ['predict', predict_proba,
+            sklearn estimator method name: ['predict', predict_proba,
             decision_function]
         pre_level: bool
-             if true, output score as integer 
+             if true, output score as integer rankings starting from 0
         pos_label
             index of predicted class
         '''
@@ -574,15 +586,15 @@ class ML_model(BaseEstimator):
                   scoring=[
                       'roc_auc', 'average_precision'],
                   cv=5,
-                  q=None,
+                  q=10,
                   bins=None,
                   max_leaf_nodes=None,
                   fit_params={},
                   title=None,
                   save_fig=True,
                   **kwargs):
-        '''run train performance of an esimator, dump: [plots/spreadsheets] to 
-        self.path_
+        '''run training of an esimator and dump performance
+        ([plots/spreadsheets]) to self.path_ folder
         
         train_set: 
             2 element tuple, (X, y) of train data
@@ -610,16 +622,16 @@ class ML_model(BaseEstimator):
             print('train data & cv_score & cv_splits data are being saved...')
             # save (X, y) data
             title = title if title is not None else 0
-            folder.write(train_set, 'data/train_{}.data'.format(title))
+            folder.write(train_set, 'data/train{}.data'.format(title))
 
             cv_score = self.cv_validate(X, y,
                                         **get_kwargs(self.cv_validate, **L),
                                         **kwargs)
             folder.write([lift_data[-1], cv_score],
-                         'spreadsheet/train_{}.xlsx'.format(title),
+                         'spreadsheet/train{}.xlsx'.format(title),
                          sheet_name=['liftcurve', 'train_score'])
             folder.write(traincv[-1],
-                         'spreadsheet/train_datasplits_{}.xlsx'.format(title))
+                         'spreadsheet/train_datasplits{}.xlsx'.format(title))
 
     def run_test(self,
                  test_set,
@@ -658,14 +670,14 @@ class ML_model(BaseEstimator):
         if self.verbose > 0:
             print('test cv_score & cv_splits test data are being saved... ')
             title = title if title is not None else 0
-            folder.write(test_set, 'data/test_{}.data'.format(title))
+            folder.write(test_set, 'data/test{}.data'.format(title))
             folder.write(testcv[-1],
-                         'spreadsheet/test_datasplits.xlsx'.format(title))
+                         'spreadsheet/test_datasplits{}.xlsx'.format(title))
             # test scores
             scores = self.test_score(X_test, y_test, cv=cv, scoring=scoring)
             folder.write([test_lift[-1], scores],
                          sheet_name=['lift_curve', 'test_score'],
-                         file='spreadsheet/test_.xlsx'.format(title))
+                         file='spreadsheet/test{}.xlsx'.format(title))
 
     def run_sensitivity(self,
                         train_set,
@@ -924,12 +936,12 @@ if __name__ == '__main__':
     # Import some data to play with
     X, y = make_classification(1000)
     # test
-    E = ML_model(estimator='clean_SVC', path='../tests_model')
+    E = ML_model(estimator='clean_SGDClassifier', path='../tests_model')
     E.run_train((X, y), q=5, save_fig=True)
     E.run_test((X, y), save_fig=True)
-    E.run_sensitivity((X,y), pipe_grid('SVC', True), 
+    E.run_sensitivity((X,y), pipe_grid('SGDClassifier', True), 
                       cv=3, save_fig=True)
     E.save_estimator()
-#    E.delete_model()
+    E.delete_model()
 
     
