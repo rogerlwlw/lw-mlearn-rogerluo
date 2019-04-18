@@ -27,6 +27,7 @@ from sklearn.feature_selection import (SelectFromModel, GenericUnivariateSelect,
 from sklearn.decomposition import PCA
 from sklearn.utils import validation
 from sklearn.utils.testing import all_estimators
+from sklearn.ensemble import RandomTreesEmbedding
 
 from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
@@ -73,7 +74,8 @@ def pipe_main(pipe=None):
             }
     # feature construction
     feature_c = {'pca': PCA(n_components='mle', whiten=True), 
-                 'poly': PolynomialFeatures(degree=2)}
+                 'poly': PolynomialFeatures(degree=2),
+                 'Rtree_embedding' : RandomTreesEmbedding(n_estimators=10)}
     # select from model
     feature_m = {
         'fsvc':
