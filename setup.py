@@ -4,7 +4,8 @@ Created on Mon Mar 25 19:01:45 2019
 
 @author: rogerluo
 """
-# build egg for lw_mlearn
+# build dist 
+# setup.py bdist_wheel bdist_egg  sdist
 
 import re
 from setuptools import setup, find_packages
