@@ -41,11 +41,12 @@ class ML_model(BaseEstimator):
     estimator
         - sklearn estimator or pipeline instance
     path
-        - dir to place model, default model
+        - dir to place model and other files, default 'model'
     seed
         - random state seed, 0 default
-    
-    
+    pos_label
+            - positive label default 1
+       
     attributes
     -----
     path_
@@ -88,15 +89,7 @@ class ML_model(BaseEstimator):
                  seed=0,
                  verbose=1,
                  pos_label=1):
-        '''
-        estimator
-            - sklearn estimator or pipeline estimator
-        path
-            - path to save model and ML_model result        
-        seed
-            - random seed to split X, y when perform cv        
-        pos_label
-            - positive label default 1
+        '''   
         '''
         self.folder = Objs_management(path)
         self.path_ = self.folder.path_
@@ -936,11 +929,16 @@ if __name__ == '__main__':
     # Import some data to play with
     X, y = make_classification(1000)
     # test
-    E = ML_model(estimator='clean_SGDClassifier', path='../tests_model')
+    estimator = 'GaussianProcessClassifier'
+    E = ML_model(estimator, path='../tests_model')
     E.run_train((X, y), q=5, save_fig=True)
     E.run_test((X, y), save_fig=True)
-    E.run_sensitivity((X,y), pipe_grid('SGDClassifier', True), 
-                      cv=3, save_fig=True)
+    
+    try:
+        grid = pipe_grid(estimator, True)
+        E.run_sensitivity((X,y), grid, cv=3, save_fig=True)
+    except:
+        pass
     E.save_estimator()
     E.delete_model()
 
