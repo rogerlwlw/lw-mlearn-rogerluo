@@ -400,7 +400,7 @@ class ML_model(BaseEstimator):
 
         if save_fig is True:
             title = 0 if title is None else str(title)
-            self.folder.write(plt.gcf(), 'plots/lift_{}.pdf'.format(title))
+            self.folder.write(plt.gcf(), 'plots/lift{}.pdf'.format(title))
             plt.close()
         return ax, plotted_data
 
@@ -486,7 +486,7 @@ class ML_model(BaseEstimator):
                       cv=3,
                       refit='roc_auc',
                       return_train_score=True,
-                      n_jobs=2,
+                      n_jobs=-1,
                       fit_params={},
                       **kwargs):
         '''tune hyper parameters of estimator by searching param_grid
@@ -680,6 +680,7 @@ class ML_model(BaseEstimator):
                         fit_params={},
                         save_fig=True,
                         title=None,
+                        n_jobs=-1,
                         **kwargs):
         '''run sensitivity of param_grid space, dump plots/spreadsheets
         
@@ -715,8 +716,8 @@ class ML_model(BaseEstimator):
         print('sensitivity results & data are being saved... ')
         title = 0 if title is None else str(title)
         folder.write(cv_results, 
-                     'spreadsheet/sensitivity_{}.xlsx'.format(title))
-        folder.write(train_set, 'data/sensitivity_{}.data'.format(title))
+                     'spreadsheet/sensitivity{}.xlsx'.format(title))
+        folder.write(train_set, 'data/sensitivity{}.data'.format(title))
 
         self.save_estimator()
         self._shut_temp_folder()
@@ -929,12 +930,13 @@ if __name__ == '__main__':
     # Import some data to play with
     X, y = make_classification(1000)
     # test
-    estimator = 'GaussianProcessClassifier'
+    estimator = 'clean_ordi_woe_fwoe_XGBClassifier'
     E = ML_model(estimator, path='../tests_model')
     E.run_train((X, y), q=5, save_fig=True)
     E.run_test((X, y), save_fig=True)
     
     try:
+        estimator = 'XGBClassifier'
         grid = pipe_grid(estimator, True)
         E.run_sensitivity((X,y), grid, cv=3, save_fig=True)
     except:

@@ -20,7 +20,7 @@ from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder,
                                    QuantileTransformer, PowerTransformer)
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import LinearSVC
-from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
 from sklearn.feature_selection import (SelectFromModel, GenericUnivariateSelect, 
                                        chi2, f_classif, mutual_info_classif,
                                        RFE)
@@ -75,12 +75,12 @@ def pipe_main(pipe=None):
     # feature construction
     feature_c = {'pca': PCA(n_components='mle', whiten=True), 
                  'poly': PolynomialFeatures(degree=2),
-                 'Rtree_embedding' : RandomTreesEmbedding(n_estimators=10)}
+                 'RTembedding' : RandomTreesEmbedding(n_estimators=10)}
     # select from model
     feature_m = {
         'fsvc':
-        SelectFromModel(LinearSVC(C=0.01, penalty="l1", dual=False)),
-        'fSGD':
+        SelectFromModel(LogisticRegressionCV(penalty='l1')),
+        'flog':
         SelectFromModel(SGDClassifier(penalty="l1")),
         'fxgb':
         SelectFromModel(XGBClassifier(n_jobs=-1), threshold=1e-5),
@@ -102,7 +102,7 @@ def pipe_main(pipe=None):
     # sklearn estimator
     t = all_estimators(type_filter=['classifier'])
     estimator = {i[0]: i[1]() for i in t}
-    estimator.update(XGBClassifier=XGBClassifier())
+    estimator.update(XGBClassifier=XGBClassifier(n_jobs=-1))
 
     if pipe is None:
         feature_s = {}
@@ -138,13 +138,13 @@ def _param_grid(estimator):
         str for sklearn estimator's name
     '''    
     XGBClassifier = [
+            {'n_estimator' : np.linspace(50, 300, 5).astype(int)}, 
+            {'max_depth': [2, 3, 4]}, 
+            {'learning_rate': np.logspace(-3, 0, 5)},
             {'reg_alpha': [1, 4, 8, 10, 15]},
             {'reg_lamdbda': [1, 4, 8, 10, 15]},
             {'min_child_weight': [0.1, 2, 4, 5, 8]},
             {'scale_pos_weight': [0.1, 5, 10, 15, 20]},
-            {'max_depth': [2, 3]},
-            {'n_estimator' : np.linspace(50, 300, 5).astype(int)},
-            {'learning_rate': np.logspace(-3, 0, 5)}
     ]
     
     SVC = [
@@ -152,12 +152,17 @@ def _param_grid(estimator):
         {'C' : np.logspace(-3, 3, 10)},
         {'gamma': np.logspace(-3, 1, 10)},
     ]
+    
     SGDClassifier = [
             {'loss' : ['hinge', 'log', 'perceptron']},
             {'penalty' : ['l2', 'l1', 'elasticnet']},
             {'alpha' : np.logspace(-5, -1, 5)},
             {'learning_rate' : [ 'adaptive', 'optimal', 'constant'], 
              'eta0' : [0.01]},
+    ]
+    
+    GaussianProcessClassifier = [{
+            }
     ]
     param_grids = locals().copy()            
     grid = param_grids.get(estimator)
@@ -166,7 +171,7 @@ def _param_grid(estimator):
     else:
         raise ValueError('no param_grid returned')
 
-def pipe_grid(estimator, pipe_grid=False):
+def pipe_grid(estimator, pipe_grid=True):
     '''return saved param_grid of given estimator
     
     estimator
@@ -428,30 +433,33 @@ def to_num_datetime_df(X, thresh=0.8):
 
 
 class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
-    '''to encode feature matrix using auto-binning based on CART tree
-    gini impurity/bins or specified by edges = {col : edges}, calcualte woe &
-    iv of each feature
+    '''to woe_encode feature matrix using auto-binning based on CART tree
+    gini impurity/bins or specified by input bin edges = {col : edges},
+    calcualte woe & iv of each feature, NaN values will be binned independently
     
-    params:               
-        input_edges={}
-            - mannual input cutting edges as 
-            {colname : [-inf, point1, point2..., inf]}
-        cat_num_lim=10
-            - number of unique vals limit to be treated as continueous feature
-        max_leaf_nodes=5
-            - max number of bins
-        min_samples_leaf=0.05
-            - minimum number of samples in leaf node
-        min_samples_split=0.08
-            - the minimun number of samles required to split a node       
-        **tree_params
-            - other decision tree keywords
+    parameters
+    ------            
+    input_edges={}
+        - mannual input cutting edges as 
+        {colname : [-inf, point1, point2..., inf]}
+    cat_num_lim
+        - number of unique vals limit to be treated as continueous feature,
+        default 0
+    max_leaf_nodes=5
+        - max number of bins
+    min_samples_leaf=0.05
+        - minimum number of samples in leaf node
+    min_samples_split=0.08
+        - the minimun number of samles required to split a node       
+    **tree_params
+        - other decision tree keywords
         
     attributes
-    ----
+    -----
     edges 
         - dict={colname : [-inf, point1, point2..., inf]}; 
-        - 'fit' method will try to get edges by decision Tree algorithm
+        - 'fit' method will try to get edges by decision Tree algorithm or
+        pandas cut method
     woe_map
         - dict={colname : {category : woe, ...}}
     woe_iv
@@ -460,7 +468,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         - iv value of each feature
       
     method
-    ----
+    -----
     fit 
         - calculate woe & iv values for each col categories, obtain 
         self edges & woe_map
@@ -473,15 +481,15 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
     path_ = Path()
 
     def __init__(self,
-                 cat_num_lim=10,
                  input_edges={},
+                 cat_num_lim=0,
                  q=None,
                  bins=None,
                  max_leaf_nodes=None,
-                 min_samples_leaf=0.1,
+                 min_samples_leaf=0.05,
                  min_samples_split=0.1,
                  criterion='gini',
-                 min_impurity_decrease=0.005,
+                 min_impurity_decrease=1e-6,
                  min_impurity_split=None,
                  random_state=0,
                  splitter='best',
@@ -492,8 +500,8 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         self.set_params(**L)
 
     def _get_binned(self, X):
-        '''to get binned matrix using self edges, 
-        cols without cutting edges will remain unchaged
+        '''to get binned matrix using self edges, cols without cutting edges
+        will remain unchaged
         '''
         if self.edges is None:
             raise Exception('no bin edges, perform fit first')
@@ -542,27 +550,19 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         ----
         df --> X woe encoded value
         '''
-
-        def _mapping(x, mapper):
-            try:
-                if x in mapper: return mapper.get(x)
-                if pd.isna(x): return mapper.get(np.nan)
-                for k, v in mapper.items():
-                    if x in k: return v
-            except Exception as e:
-                raise Exception
-                print(e, x, k, v)
-
         X = self._filter_labels(X)
         # --
         woe_map = self.woe_map
         cols = []
         cols_notcoded = []
-
         for name, col in X.iteritems():
             if name in woe_map:
                 mapper = woe_map.get(name)
-                cols.append(col.apply(_mapping, mapper=mapper))
+                if mapper.get(np.nan) is not None:
+                    na = mapper.pop(np.nan)
+                    cols.append(col.map(mapper).fillna(na))
+                else:
+                    cols.append(col.map(mapper).fillna(0))
             else:
                 cols_notcoded.append(col.name)
 
@@ -608,9 +608,9 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
             plt.close()
 
 
-@dec_iferror_getargs
 def _tree_univar_bin(arr_x, arr_y, **kwargs):
     '''univariate binning based on binary decision Tree
+    
     return
     ----
     ndarray of binning edges
@@ -653,7 +653,7 @@ def _mono_cut(Y, X):
 
 def bin_tree(X,
              y,
-             cat_num_lim=5,
+             cat_num_lim=0,
              max_leaf_nodes=10,
              min_samples_leaf=0.05,
              random_state=0,
@@ -661,7 +661,7 @@ def bin_tree(X,
              **kwargs):
     '''discrete features based on univariate run of DecisionTree classifier
     (CART tree - gini impurity as criterion, not numeric dtype will be igored,
-    unique number of vals less than "cat_num_lim" will be ignored)
+    unique number of values less than "cat_num_lim" will be ignored)
     
     df_X 
         - df, contain feature matrix, should be numerical dtype
@@ -675,6 +675,7 @@ def bin_tree(X,
         - minimum number of samples in leaf node
     **kwargs
         - other tree keywords
+    
     return
     ----
     bin_edges
@@ -685,8 +686,9 @@ def bin_tree(X,
     cols = []
     un_split = []
     for name, col in X.iteritems():
-        col_notna = col.dropna()
-        y_notna = y[col_notna.index]
+        df = pd.DataFrame({'x' : col, 'y' : y})
+        col_notna = df.dropna().x        
+        y_notna = df.dropna().y
         if (len(pd.unique(col_notna)) > cat_num_lim
                 and api.is_numeric_dtype(col_notna)):
             # call _tree_univar_bin
@@ -792,16 +794,22 @@ def _woe_binning(X,
                  q=None,
                  bins=None,
                  max_leaf_nodes=None,
-                 cat_num_lim=5,
+                 cat_num_lim=0,
                  **kwargs):
     '''use by Woe_encoder
+    
+    return
+    ----
+    edges:
+        {colname : [-inf, point1, point2..., inf]}
     '''
     bin_edges = {}
     for name, col in X.iteritems():
-        col_notna = col.dropna()
-        y_notna = y[col_notna.index]
-        if (len(pd.unique(col_notna)) > cat_num_lim
-                and api.is_numeric_dtype(col_notna)):
+        df = pd.DataFrame({'x' : col, 'y' : y})
+        col_notna = df.dropna().x        
+        y_notna = df.dropna().y        
+        if (len(pd.unique(col_notna)) > cat_num_lim \
+            and api.is_numeric_dtype(col_notna)):
             label, bin_edges[name] = _binning(
                 col_notna, bins, q, max_leaf_nodes, y_notna, **kwargs)
     return bin_edges
@@ -809,9 +817,11 @@ def _woe_binning(X,
 
 @dec_iferror_getargs
 def _single_woe(X, Y, var_name='VAR'):
-    '''calculate woe and iv for single binned feature X, with binary Y target
+    '''calculate woe and iv for single binned X feature, with binary Y target
     
     - y=1 event; y=0 non_event 
+    - na value in X will be grouped independently
+    
     return
     ----
     df, of WOE, IVI and IV_SUM ...
@@ -834,33 +844,43 @@ def _single_woe(X, Y, var_name='VAR'):
             "NONEVENT": [justmiss.count().Y - justmiss.sum().Y]
         })
         d3 = pd.concat([d3, d4], axis=0, ignore_index=True, sort=True)
+    
+    # add 1 when event or nonevent count equals 0
+    dc = d3.copy()
+    dc.EVENT.replace(0, 1, True)
+    dc.NONEVENT.replace(0, 1, True)
+    dc["EVENT_RATE"] = dc.EVENT / dc.COUNT
+    dc["NON_EVENT_RATE"] = dc.NONEVENT / dc.COUNT
+    dc["DIST_EVENT"] = dc.EVENT / dc.sum().EVENT
+    dc["DIST_NON_EVENT"] = dc.NONEVENT / dc.sum().NONEVENT  
+    # add 1 when event or nonevent count equals 0
 
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        d3["EVENT_RATE"] = d3.EVENT / d3.COUNT
-        d3["NON_EVENT_RATE"] = d3.NONEVENT / d3.COUNT
-        d3["DIST_EVENT"] = d3.EVENT / d3.sum().EVENT
-        d3["DIST_NON_EVENT"] = d3.NONEVENT / d3.sum().NONEVENT
-        d3["WOE"] = np.log(d3.DIST_EVENT / d3.DIST_NON_EVENT)
-        d3["IV"] = (d3.DIST_EVENT - d3.DIST_NON_EVENT) * np.log(
-            d3.DIST_EVENT / d3.DIST_NON_EVENT)
+    d3["EVENT_RATE"] = d3.EVENT / d3.COUNT
+    d3["NON_EVENT_RATE"] = d3.NONEVENT / d3.COUNT
+    d3["DIST_EVENT"] = d3.EVENT / d3.sum().EVENT
+    d3["DIST_NON_EVENT"] = d3.NONEVENT / d3.sum().NONEVENT       
+    d3["WOE"] = np.log(dc.DIST_EVENT / dc.DIST_NON_EVENT)
+    d3["IV"] = (dc.DIST_EVENT - dc.DIST_NON_EVENT) * np.log(
+        dc.DIST_EVENT / dc.DIST_NON_EVENT)
 
     d3["FEATURE_NAME"] = var_name
     d3 = d3[[
         'FEATURE_NAME', 'CATEGORY', 'COUNT', 'EVENT', 'EVENT_RATE', 'NONEVENT',
         'NON_EVENT_RATE', 'DIST_EVENT', 'DIST_NON_EVENT', 'WOE', 'IV'
     ]]
-    d3 = d3.replace([np.inf, -np.inf], 0)
+    
     d3['IV_SUM'] = d3.IV.sum()
     d3 = d3.reset_index(drop=True)
     return d3
 
 
 def calc_woe(df_binned, y):
-    '''calculate woe and iv for binned feature_matrix 'df_binned', bins/category 
-    will be str dtype (contained as df with a binary 'y' target)
-        - woe = 0 if event/non_event = 0
+    '''calculate woe and iv 
+    
+    df_binned
+        - binned feature_matrix
+    y
+        - binary 'y' target   
     
     return
     ----
@@ -868,6 +888,7 @@ def calc_woe(df_binned, y):
             'VAR_NAME','CATEGORY', 'COUNT', 'EVENT', 'EVENT_RATE',
             'NONEVENT', 'NON_EVENT_RATE', 'DIST_EVENT','DIST_NON_EVENT',
             'WOE', 'IV' ]
+    
     woe_map = {'colname' : {category : woe}}
     
     iv series
@@ -885,6 +906,7 @@ def calc_woe(df_binned, y):
         woe_map[name] = dict(col_iv[['CATEGORY', 'WOE']].values)
         iv.append(col_iv.IV.sum())
         var_names.append(name)
+        
     # concatenate col_iv
     woe_iv = pd.concat(l, axis=0, ignore_index=True)
     print('total of {} cols get woe & iv'.format(len(l)))
@@ -994,66 +1016,4 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         return rst
 
 
-class Tree_embedding(BaseEstimator, TransformerMixin, Base_clean):
-    '''Transform your features into a higher dimensional, sparse space using 
-    'apply'method of decision trees or ensemble of trees. 
-    Each sample goes through the decisions of each tree of the ensemble and 
-    ends up in one leaf per tree. the indices of leaf node is then 
-    one-hot-encoded to get new higher, sparse feature space
-    
-    parameters
-    ----
-    estimator
-        - estimator instance like decision tree, random forests, GBM
-    
-    attributes
-    ----
-    see Base_clean attributes
-    '''
 
-    def __init__(self, estimator_=None):
-        ''' '''
-        if not hasattr(estimator_, 'apply'):
-            self._raise_error(0)
-        if not hasattr(estimator_, 'fit'):
-            self._raise_error(1)
-        self.estimator_ = estimator_
-
-    def _raise_error(self, n):
-        ''' '''
-        if n == 0:
-            raise AttributeError("'estimator' has no 'apply' method")
-        if n == 1:
-            raise AttributeError("'estimator' has no 'fit'  method")
-
-    def fit(self, X, y=None, **fit_params):
-        ''' fit estimator and one hot encoder
-        '''
-        X = self._fit(X)
-        # --
-        estimator = self.estimator_
-        estimator.fit(X, y, **fit_params)
-        # --
-        X_app = self.estimator_.apply(X)
-        Oht = OneHotEncoder(handle_unknown='ignore', sparse=False)
-        X_app = self._check_df(X_app)
-        Oht.fit(X_app)
-        # --
-        self.encoder = Oht
-        cat_names = Oht.categories_
-        self.out_labels = [
-            '_'.join([str(i), str(a)]) for i, j in zip(X.columns, cat_names)
-            for a in j
-        ]
-        return self
-
-    def transform(self, X):
-        '''transform data as leaf nodes indices '''
-        X = self._filter_labels(X)
-        # --
-        estimator = self.estimator_
-        encoder = self.encoder
-        X_app = self._check_df(estimator.apply(X))
-        X_tr = encoder.transform(X_app)
-
-        return X_tr
