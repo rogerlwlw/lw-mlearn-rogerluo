@@ -22,7 +22,7 @@ from lw_mlearn.utilis import get_flat_list, get_kwargs
 #
 plt.style.use('seaborn')
 plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']  #Chinese font
-plt.rcParams['axes.unicode_minus'] = False  
+plt.rcParams['axes.unicode_minus'] = False
 plt.rcParams.update({
     'figure.dpi': 90.0,
     'font.size': 10.0,
@@ -263,7 +263,7 @@ def plotter_cv_results_(results,
             df.index = results[param_array[0]]
             xlabel = param_array[0]
             num_param = api.is_numeric_dtype(df.index)
-            if not num_param:                
+            if not num_param:
                 df.index = np.arange(len(df.index))
         else:
             xlabel = 'n_iteration'
@@ -292,7 +292,7 @@ def plotter_cv_results_(results,
         ax0.axvline(x_max, linestyle='--', marker='x', color='y')
         ax0.annotate("%0.4f" % best_score, (x_max, best_score))
         plt.setp(ax0, ylabel=s)
-    
+
     # set title
     ax[0].set_title(title, fontsize=13)
     # use fig legend
@@ -366,7 +366,7 @@ def plotter_rateVol(df,
     axe.yaxis.set_major_formatter(fmt)
     axe.xaxis.set_label_position(xlabel_position)
     if labels.astype(str).apply(len).max() > 8:
-        axe.tick_params('x', labelrotation=xlabelrotation)    
+        axe.tick_params('x', labelrotation=xlabelrotation)
     # set axe_right attr
     axe_right.set_ylabel(vol.name)
     axe_right.grid(False)
@@ -462,6 +462,45 @@ def get_ticks_formatter(name, *args, **kwargs):
     return frm
 
 
+def plotter_score_path(df_score, title=None, cm=None, style='-.o'):
+    '''
+    df_score:
+        data frame of scores of metrics
+    '''
+    # plot
+    data = df_score.select_dtypes(include='number')
+    n = len(data.columns)
+    i, j = plt.rcParams['figure.figsize']
+    fig, ax = plt.subplots(n, 1, figsize=(i, j + 2.5 * (n // 2)))
+    ax = get_flat_list(ax) if n == 1 else ax
+    if cm is None:
+        cm = plt.get_cmap('tab20')
+    cmlist = [cm(i) for i in np.linspace(0, 1, n)]
+
+    i = 0
+    for ax0, col in zip(ax, data.columns):
+        s = data[col]
+        if api.is_numeric_dtype(s):
+
+            s.plot(ax=ax0, color=cmlist[i], style=style)
+            ax0.fill_between(
+                s.index,
+                s - s.std(),
+                s + s.std(),
+                color='grey',
+                alpha=.3,
+                label=r'{} = {}$\pm$ {}'.format(col, round(s.mean(), 4),
+                                                round(s.std(), 4)))
+            plt.setp(ax0, ylabel=col)
+            h, l = ax0.get_legend_handles_labels()
+            ax0.legend([h[-1]], [l[-1]])
+            i += 1
+    ax[0].set_title(title)
+    ax[-1].set_xlabel('index')
+    plt.tight_layout(rect=(0, 0, 0.98, 0.96))
+    return fig
+
+
 def get_font_dict():
     font = {
         'family': 'serif',
@@ -477,13 +516,15 @@ def _annotate(x, y, ax):
     ''' plot annotate
     '''
     if api.is_list_like(x):
-        for i, j in zip(x, y):            
-            ax.annotate(s='%.1f%%' % (100*j), 
-                        xy=(i, j),
-                        xytext=(10, 10),
-                        textcoords='offset pixels') 
+        for i, j in zip(x, y):
+            ax.annotate(
+                s='%.1f%%' % (100 * j),
+                xy=(i, j),
+                xytext=(10, 10),
+                textcoords='offset pixels')
     return ax
-                     
+
+
 def make_meshgrid(x, y, h=.02):
     """Create a mesh of points to plot in
 
@@ -499,13 +540,19 @@ def make_meshgrid(x, y, h=.02):
     """
     x_min, x_max = x.min() - 1, x.max() + 1
     y_min, y_max = y.min() - 1, y.max() + 1
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                         np.arange(y_min, y_max, h))
+    xx, yy = np.meshgrid(
+        np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
     return xx, yy
 
 
-def plotter_contours(ax, clf, x, y, h=0.02, pre_method='predict', pos_label=1, 
-                  **params):
+def plotter_contours(ax,
+                     clf,
+                     x,
+                     y,
+                     h=0.02,
+                     pre_method='predict',
+                     pos_label=1,
+                     **params):
     """Plot the decision boundaries for a classifier.
 
     Parameters
@@ -523,13 +570,16 @@ def plotter_contours(ax, clf, x, y, h=0.02, pre_method='predict', pos_label=1,
         Z = pre(np.c_[xx.ravel(), yy.ravel()])
     if np.ndim(Z) > 1:
         Z = Z[:, pos_label]
-              
+
     Z = Z.reshape(xx.shape)
     out = ax.contourf(xx, yy, Z, **params)
     return out
 
+
 if __name__ == '__main__':
-   df = pd.DataFrame({'X' : ['A', 'B', 'C', 'D', 'E'], 
-                      'rate' : np.random.rand(5), 
-                      'vol' : np.random.randint(1000, size=5)})
-   plotter_rateVol(df)
+    df = pd.DataFrame({
+        'X': ['A', 'B', 'C', 'D', 'E'],
+        'rate': np.random.rand(5),
+        'vol': np.random.randint(1000, size=5)
+    })
+    plotter_rateVol(df)
