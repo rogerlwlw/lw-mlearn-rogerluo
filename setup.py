@@ -4,7 +4,7 @@ Created on Mon Mar 25 19:01:45 2019
 
 @author: rogerluo
 """
-# build dist 
+# build dist
 # setup.py bdist_wheel bdist_egg  sdist
 
 import re
@@ -24,14 +24,9 @@ setup(
     packages=find_packages(),
     inlcude_package_data=True,
     install_requires=[
-        'sklearn-pandas', 
-        'numpy>=1.15.0', 
-        'pandas>=0.23.0',
-        'scikit-learn>=0.20.0', 
-        'scipy>=1.1.0', 
-        'matplotlib>=3.0.0',
-        'yapf>=0.25.0', 
-        'xgboost>=0.81'
+        'sklearn-pandas>=1.8.0', 'numpy>=1.15.0', 'pandas>=0.23.0',
+        'scikit-learn>=0.20.0', 'scipy>=1.1.0', 'matplotlib>=3.0.0',
+        'yapf>=0.25.0', 'xgboost>=0.81', 'imbalanced-learn>=0.4.0'
     ],
     author="rogerluo",
     author_email="coolww@outlook.com",
