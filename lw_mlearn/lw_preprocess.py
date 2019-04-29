@@ -12,25 +12,53 @@ import scipy.stats as stats
 from pandas.core.dtypes import api
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder,
-                                   PolynomialFeatures, StandardScaler, 
+                                   PolynomialFeatures, StandardScaler,
                                    MinMaxScaler, RobustScaler, Normalizer,
                                    QuantileTransformer, PowerTransformer)
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
-from sklearn.feature_selection import (SelectFromModel, GenericUnivariateSelect, 
-                                       chi2, f_classif, mutual_info_classif,
-                                       RFE)
+from sklearn.feature_selection import (SelectFromModel,
+                                       GenericUnivariateSelect, chi2,
+                                       f_classif, mutual_info_classif, RFE)
 from sklearn.decomposition import PCA
 from sklearn.utils import validation
 from sklearn.utils.testing import all_estimators
 from sklearn.ensemble import RandomTreesEmbedding
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.ensemble import IsolationForest
+from sklearn.covariance import EllipticEnvelope
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.svm import OneClassSVM
 
 from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
+from imblearn.pipeline import Pipeline
+from imblearn.under_sampling import (
+    RandomUnderSampler,
+    TomekLinks,
+    NearMiss,
+    CondensedNearestNeighbour,
+    OneSidedSelection,
+    NeighbourhoodCleaningRule,
+    EditedNearestNeighbours,
+    AllKNN,
+    InstanceHardnessThreshold,
+)
+from imblearn.over_sampling import (
+    ADASYN,
+    RandomOverSampler,
+    SMOTE,
+    BorderlineSMOTE,
+    SVMSMOTE,
+    SMOTENC,
+)
+
+from imblearn.combine import SMOTEENN, SMOTETomek
+
+from imblearn import FunctionSampler
 
 from lw_mlearn.utilis import (dec_iferror_getargs, get_kwargs)
 from lw_mlearn.plotter import plotter_rateVol
@@ -56,31 +84,88 @@ def pipe_main(pipe=None):
         1) pipeline instance of chosen steps
         2) if pipe is None, a dict indicating possible choice of 'steps'
     '''
-    clean = {'clean': Split_cls('not_datetime')}
-    # 
+    clean = {
+        'clean': Split_cls('not_datetime'),
+    }
+    #
     encode = {
-        'oht': Cat_encoder(encode_type='oht'),
-        'ordi': Cat_encoder(encode_type='ordi'),
+        'oht': Cat_encoder(encode_type='oht', na1=-999),
+        'ordi': Cat_encoder(encode_type='ordi', na1=-999),
         'woe': Woe_encoder(max_leaf_nodes=5),
     }
-    
+
+    resample = {
+
+        # over_sampling
+        'rover':
+        RandomOverSampler(),
+        'smote':
+        SMOTE(),
+        'bsmote':
+        BorderlineSMOTE(),
+        'adasyn':
+        ADASYN(),
+
+        # under sampling controlled methods
+        'runder':
+        RandomUnderSampler(),
+        'nearmiss':
+        NearMiss(version=3),
+        'pcart':
+        InstanceHardnessThreshold(),
+
+        # under sampling cleaning methods
+        'tlinks':
+        TomekLinks('all'),
+        'enn':
+        EditedNearestNeighbours(n_jobs=-1),
+        'ann':
+        AllKNN(n_jobs=-1),
+        'cnn':
+        CondensedNearestNeighbour(n_jobs=-1),
+        'Oside':
+        OneSidedSelection(n_jobs=-1),
+        'cleanNN':
+        NeighbourhoodCleaningRule(n_jobs=-1),
+
+        # clean outliers
+        'inlierForest':
+        FunctionSampler(
+            outlier_rejection, kw_args={'method': 'IsolationForest'}),
+        'inlierLocal':
+        FunctionSampler(
+            outlier_rejection, kw_args={'method': 'LocalOutlierFactor'}),
+        'inlierEllip':
+        FunctionSampler(
+            outlier_rejection, kw_args={'method': 'EllipticEnvelope'}),
+        'inlierOsvm':
+        FunctionSampler(outlier_rejection, kw_args={'method': 'OneClassSVM'}),
+        # combine
+        'smoteenn':
+        SMOTEENN(),
+        'smotelink':
+        SMOTETomek(),
+    }
+
     scale = {
-        'stdscale' : StandardScaler(),
-        'maxscale' : MinMaxScaler(),
-        'rscale' : RobustScaler(quantile_range=(10,90)),
-        'qauntile' : QuantileTransformer(), # uniform distribution
-        'power' :  PowerTransformer(), # Gaussian distribution
-        'norm' : Normalizer(),
-            }
+        'stdscale': StandardScaler(),
+        'maxscale': MinMaxScaler(),
+        'rscale': RobustScaler(quantile_range=(10, 90)),
+        'qauntile': QuantileTransformer(),  # uniform distribution
+        'power': PowerTransformer(),  # Gaussian distribution
+        'norm': Normalizer(),
+    }
     # feature construction
-    feature_c = {'pca': PCA(n_components='mle', whiten=True), 
-                 'poly': PolynomialFeatures(degree=2),
-                 'RTembedding' : RandomTreesEmbedding(n_estimators=10)}
+    feature_c = {
+        'pca': PCA(n_components='mle', whiten=True),
+        'poly': PolynomialFeatures(degree=2),
+        'RTembedding': RandomTreesEmbedding(n_estimators=10)
+    }
     # select from model
     feature_m = {
-        'fsvc':
-        SelectFromModel(LogisticRegressionCV(penalty='l1')),
         'flog':
+        SelectFromModel(LogisticRegressionCV(penalty='l1')),
+        'fsgd':
         SelectFromModel(SGDClassifier(penalty="l1")),
         'fxgb':
         SelectFromModel(XGBClassifier(n_jobs=-1), threshold=1e-5),
@@ -90,15 +175,20 @@ def pipe_main(pipe=None):
             threshold=1e-5),
         'fwoe':
         SelectFromModel(Woe_encoder(max_leaf_nodes=5), threshold=0.019),
-        'fRFExgb' : RFE(XGBClassifier(n_jobs=-1), step=0.1),
-        'fRFEsvc' : RFE(LinearSVC(), step=0.1)        
+        'fRFExgb':
+        RFE(XGBClassifier(n_jobs=-1), step=0.1),
+        'fRFEsvc':
+        RFE(LinearSVC(), step=0.1)
     }
     # Univariate feature selection
-    feature_u = {'fchi2' : GenericUnivariateSelect(chi2, 'percentile', 20),
-                 'fMutualclf' : GenericUnivariateSelect(mutual_info_classif,
-                                                    'percentile', 20),
-                'fFclf' : GenericUnivariateSelect(f_classif, 'percentile', 20),
-                 }
+    feature_u = {
+        'fchi2':
+        GenericUnivariateSelect(chi2, 'percentile', 20),
+        'fMutualclf':
+        GenericUnivariateSelect(mutual_info_classif, 'percentile', 20),
+        'fFclf':
+        GenericUnivariateSelect(f_classif, 'percentile', 20),
+    }
     # sklearn estimator
     t = all_estimators(type_filter=['classifier'])
     estimator = {i[0]: i[1]() for i in t}
@@ -110,7 +200,8 @@ def pipe_main(pipe=None):
         return {
             'clean': clean.keys(),
             'encoding': encode.keys(),
-            'scale' : scale.keys(),
+            'resample': resample.keys(),
+            'scale': scale.keys(),
             'feature_c': feature_c.keys(),
             'feature_s': feature_s.keys(),
             'estimator': estimator.keys()
@@ -118,58 +209,20 @@ def pipe_main(pipe=None):
     elif isinstance(pipe, str):
         l = pipe.split('_')
         all_keys_dict = {}
-        all_keys_dict.update(**clean, **encode, **scale, **feature_c, 
-                             **feature_m, **feature_u, **estimator)         
+        all_keys_dict.update(**clean, **encode, **scale, **feature_c,
+                             **feature_m, **feature_u, **estimator, **resample)
         steps = []
         for i in l:
             if all_keys_dict.get(i) is not None:
                 steps.append((i, all_keys_dict.get(i)))
             else:
-                raise ValueError(
-                    "'{}' is not valid key for sklearn estimators".format(i))
+                raise KeyError(
+                    "'{}' invalid key for sklearn estimators".format(i))
         return Pipeline(steps)
-                
+
     else:
         raise ValueError("input pipe must be a string in format 'xx[_xx]'")
 
-def _param_grid(estimator):
-    '''    
-    estimator:
-        str for sklearn estimator's name
-    '''    
-    XGBClassifier = [
-            {'n_estimator' : np.linspace(50, 300, 5).astype(int)}, 
-            {'max_depth': [2, 3, 4]}, 
-            {'learning_rate': np.logspace(-3, 0, 5)},
-            {'reg_alpha': [1, 4, 8, 10, 15]},
-            {'reg_lamdbda': [1, 4, 8, 10, 15]},
-            {'min_child_weight': [0.1, 2, 4, 5, 8]},
-            {'scale_pos_weight': [0.1, 5, 10, 15, 20]},
-    ]
-    
-    SVC = [
-        {'kernel' : ['linear', 'poly', 'sigmoid', 'rbf']},
-        {'C' : np.logspace(-3, 3, 10)},
-        {'gamma': np.logspace(-3, 1, 10)},
-    ]
-    
-    SGDClassifier = [
-            {'loss' : ['hinge', 'log', 'perceptron']},
-            {'penalty' : ['l2', 'l1', 'elasticnet']},
-            {'alpha' : np.logspace(-5, -1, 5)},
-            {'learning_rate' : [ 'adaptive', 'optimal', 'constant'], 
-             'eta0' : [0.01]},
-    ]
-    
-    GaussianProcessClassifier = [{
-            }
-    ]
-    param_grids = locals().copy()            
-    grid = param_grids.get(estimator)
-    if grid is not None:
-        return grid
-    else:
-        raise ValueError('no param_grid returned')
 
 def pipe_grid(estimator, pipe_grid=True):
     '''return saved param_grid of given estimator
@@ -184,14 +237,104 @@ def pipe_grid(estimator, pipe_grid=True):
         keys = estimator
     else:
         keys = estimator.__class__.__name__
-        
+
     param_grid = _param_grid(keys)
     if pipe_grid is True:
-        param_grid = [
-            {'__'.join([keys, k]): i.get(k) for k in i.keys()}
-            for i in param_grid if api.is_dict_like(i)
-        ]
+        param_grid = [{'__'.join([keys, k]): i.get(k)
+                       for k in i.keys()} for i in param_grid
+                      if api.is_dict_like(i)]
     return param_grid
+
+
+def _param_grid(estimator):
+    '''    
+    estimator:
+        str for sklearn estimator's name
+    return
+    ----
+        param_grid dict
+    '''
+    XGBClassifier = [
+        {
+            'learning_rate': np.logspace(-3, 0, 5),
+            'n_estimator': np.linspace(50, 300, 5).astype(int)
+        },
+        {
+            'max_depth': [2, 3, 4]
+        },
+        {
+            'gamma': np.logspace(0, 1, 5)
+        },
+        {
+            'reg_alpha': np.logspace(0, 1, 5)
+        },
+        {
+            'reg_lamdbda': np.logspace(0, 1, 5)
+        },
+        {
+            'scale_pos_weight': np.logspace(0, 1.5, 5)
+        },
+    ]
+
+    SVC = [
+        {
+            'kernel': ['linear', 'poly', 'sigmoid', 'rbf']
+        },
+        {
+            'C': np.logspace(-3, 3, 10)
+        },
+        {
+            'gamma': np.logspace(-3, 1, 10)
+        },
+    ]
+
+    SGDClassifier = [
+        {
+            'loss': ['hinge', 'log', 'perceptron']
+        },
+        {
+            'penalty': ['l2', 'l1', 'elasticnet']
+        },
+        {
+            'alpha': np.logspace(-5, -1, 5)
+        },
+        {
+            'learning_rate': ['adaptive', 'optimal', 'constant'],
+            'eta0': [0.01]
+        },
+    ]
+
+    param_grids = locals().copy()
+    grid = param_grids.get(estimator)
+    if grid is not None:
+        return grid
+    else:
+        raise KeyError(
+            "key '{}' not found, no param_grid returned".format(estimator))
+
+
+def outlier_rejection(X=None,
+                      y=None,
+                      method='IsolationForest',
+                      contamination=0.1):
+    """This will be our function used to resample our dataset."""
+    outlier_model = (
+        IsolationForest(contamination=contamination),
+        LocalOutlierFactor(contamination=contamination),
+        OneClassSVM(nu=contamination),
+        EllipticEnvelope(contamination=contamination),
+    )
+
+    outlier_model = {i.__class__.__name__: i for i in outlier_model}
+
+    if X is None:
+        return outlier_model.keys()
+    model = outlier_model.get(method)
+    if model is None:
+        raise ValueError("method '{}' is invalid".format(method))
+    y_pred = model.fit_predict(X)
+    return X[y_pred == 1], y[y_pred == 1]
+
 
 class Base_clean():
     '''base cleaner
@@ -304,7 +447,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         L = locals().copy()
         L.pop('self')
         self.set_params(**L)
-               
+
     def fit(self, X, y=None):
         '''fit input_labels & out_labels 
         '''
@@ -312,14 +455,14 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         # drop na columns
         na_col = X.columns[X.apply(lambda x: all(x.isna()))]
         X.dropna(axis=1, how='all', inplace=True)
-        
+
         # drop uid cols
         uid_col = []
         for k, col in X.iteritems():
             if (api.is_object_dtype(col) or api.is_integer_dtype(col)) \
-            and len(pd.unique(col)) > 0.8*len(col):            
-                 X.drop(k, axis=1, inplace=True) 
-                 uid_col.append(k)
+            and len(pd.unique(col)) > 0.8*len(col):
+                X.drop(k, axis=1, inplace=True)
+                uid_col.append(k)
         # filter dtypes
         options = {
             'not_datetime': X.select_dtypes(exclude='datetime'),
@@ -329,14 +472,15 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
             'all': X
         }
         self.out_labels = options.get(self.dtype_filter).columns.tolist()
-       
+
         # --
         if len(na_col) > 0:
-            print('{} of columns are null , have been dropped \n'.format(
-                na_col))
+            print('{} of columns total {} are null , have been dropped \n'.
+                  format(na_col, len(na_col)))
         if len(uid_col) > 0:
-            print('{} of columns are uid , have been dropped \n'.format(
-                uid_col))
+            print(
+                '{} of columns total {} are uid , have been dropped \n'.format(
+                    uid_col, len(uid_col)))
 
         if self.verbose > 0:
             for k, i in options.items():
@@ -626,7 +770,7 @@ def _tree_univar_bin(arr_x, arr_y, **kwargs):
     thresh = clf.tree_.threshold
     feature = clf.tree_.feature
     thresh = np.unique(thresh[(feature >= 0).nonzero()]).round(
-        kwargs.get('decimal', 4))
+        kwargs.get('decimal', 8))
     cut_edges = np.append(np.append(-np.inf, thresh), np.inf)
     return np.unique(cut_edges)
 
@@ -686,8 +830,8 @@ def bin_tree(X,
     cols = []
     un_split = []
     for name, col in X.iteritems():
-        df = pd.DataFrame({'x' : col, 'y' : y})
-        col_notna = df.dropna().x        
+        df = pd.DataFrame({'x': col, 'y': y})
+        col_notna = df.dropna().x
         y_notna = df.dropna().y
         if (len(pd.unique(col_notna)) > cat_num_lim
                 and api.is_numeric_dtype(col_notna)):
@@ -762,7 +906,7 @@ def _binning(y_pre=None,
             'must and only 1 of (q, bins, max_leaf_nodes) can be specified')
 
     if q is not None:
-        bins = np.percentile(y_pre, np.linspace(0, 100, q + 1)).round(4)
+        bins = np.percentile(y_pre, np.linspace(0, 100, q + 1))
         bins[0] = -np.Inf
         bins[-1] = np.Inf
 
@@ -805,9 +949,9 @@ def _woe_binning(X,
     '''
     bin_edges = {}
     for name, col in X.iteritems():
-        df = pd.DataFrame({'x' : col, 'y' : y})
-        col_notna = df.dropna().x        
-        y_notna = df.dropna().y        
+        df = pd.DataFrame({'x': col, 'y': y})
+        col_notna = df.dropna().x
+        y_notna = df.dropna().y
         if (len(pd.unique(col_notna)) > cat_num_lim \
             and api.is_numeric_dtype(col_notna)):
             label, bin_edges[name] = _binning(
@@ -844,7 +988,7 @@ def _single_woe(X, Y, var_name='VAR'):
             "NONEVENT": [justmiss.count().Y - justmiss.sum().Y]
         })
         d3 = pd.concat([d3, d4], axis=0, ignore_index=True, sort=True)
-    
+
     # add 1 when event or nonevent count equals 0
     dc = d3.copy()
     dc.EVENT.replace(0, 1, True)
@@ -852,13 +996,13 @@ def _single_woe(X, Y, var_name='VAR'):
     dc["EVENT_RATE"] = dc.EVENT / dc.COUNT
     dc["NON_EVENT_RATE"] = dc.NONEVENT / dc.COUNT
     dc["DIST_EVENT"] = dc.EVENT / dc.sum().EVENT
-    dc["DIST_NON_EVENT"] = dc.NONEVENT / dc.sum().NONEVENT  
+    dc["DIST_NON_EVENT"] = dc.NONEVENT / dc.sum().NONEVENT
     # add 1 when event or nonevent count equals 0
 
     d3["EVENT_RATE"] = d3.EVENT / d3.COUNT
     d3["NON_EVENT_RATE"] = d3.NONEVENT / d3.COUNT
     d3["DIST_EVENT"] = d3.EVENT / d3.sum().EVENT
-    d3["DIST_NON_EVENT"] = d3.NONEVENT / d3.sum().NONEVENT       
+    d3["DIST_NON_EVENT"] = d3.NONEVENT / d3.sum().NONEVENT
     d3["WOE"] = np.log(dc.DIST_EVENT / dc.DIST_NON_EVENT)
     d3["IV"] = (dc.DIST_EVENT - dc.DIST_NON_EVENT) * np.log(
         dc.DIST_EVENT / dc.DIST_NON_EVENT)
@@ -868,7 +1012,7 @@ def _single_woe(X, Y, var_name='VAR'):
         'FEATURE_NAME', 'CATEGORY', 'COUNT', 'EVENT', 'EVENT_RATE', 'NONEVENT',
         'NON_EVENT_RATE', 'DIST_EVENT', 'DIST_NON_EVENT', 'WOE', 'IV'
     ]]
-    
+
     d3['IV_SUM'] = d3.IV.sum()
     d3 = d3.reset_index(drop=True)
     return d3
@@ -906,7 +1050,7 @@ def calc_woe(df_binned, y):
         woe_map[name] = dict(col_iv[['CATEGORY', 'WOE']].values)
         iv.append(col_iv.IV.sum())
         var_names.append(name)
-        
+
     # concatenate col_iv
     woe_iv = pd.concat(l, axis=0, ignore_index=True)
     print('total of {} cols get woe & iv'.format(len(l)))
@@ -980,6 +1124,8 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X = self._fit(X)
         obj_cols = X.columns[X.dtypes.apply(api.is_object_dtype)].tolist()
         not_obj = X.columns[~X.dtypes.apply(api.is_object_dtype)].tolist()
+        print('{} of columns {} are object dtype'.format(
+            len(obj_cols), obj_cols))
         # --
         if self.encode_type == 'ordi':
             encoder = OrdinalEncoder()
@@ -1014,6 +1160,3 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X = self._check_categories(X)
         rst = self.encoder.transform(X)
         return rst
-
-
-
