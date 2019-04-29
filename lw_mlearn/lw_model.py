@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import os
 
 from scipy import interp
-from sklearn.utils import validation
+from sklearn.utils import validation, check_consistent_length
 from sklearn.base import clone, BaseEstimator, is_classifier, is_regressor
 from sklearn.model_selection import _split
 from sklearn.model_selection import (GridSearchCV, RandomizedSearchCV,
@@ -26,7 +26,8 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.pipeline import Pipeline
 
 from lw_mlearn.utilis import get_flat_list, get_kwargs
-from lw_mlearn.plotter import plotter_rateVol, plotter_auc, plotter_cv_results_
+from lw_mlearn.plotter import (plotter_rateVol, plotter_auc,
+                               plotter_cv_results_, plotter_score_path)
 from lw_mlearn.read_write import Objs_management
 from lw_mlearn.lw_preprocess import pipe_main, pipe_grid, _binning
 from functools import wraps
@@ -100,7 +101,7 @@ class ML_model(BaseEstimator):
 
         if estimator is not None:
             if isinstance(estimator, str):
-                self.estimator =  pipe_main(estimator)
+                self.estimator = pipe_main(estimator)
             elif hasattr(estimator, '_estimator_type'):
                 self.estimator = estimator
             else:
@@ -148,11 +149,21 @@ class ML_model(BaseEstimator):
             y_pre = method(X)
         else:
             raise ValueError('estimator have no continuous predictions')
-        
-        if np.ndim(y_pre) > 1: 
-                y_pre = y_pre[:, self.pos_label]
+
+        if np.ndim(y_pre) > 1:
+            y_pre = y_pre[:, self.pos_label]
         return y_pre
 
+    def _get_dataset(self, suffix):
+        '''return list of obj read from 'data' folder given suffix type
+        '''
+        gen, _ = self.folder.read_all(suffix, path='data')
+        gen = list(gen)
+        if len(gen) is 0:
+            raise FileNotFoundError(
+                "file with '{}' suffix not found in 'data' folder... \n".
+                format(suffix))
+        return gen
 
     def plot_auc_test(self,
                       X,
@@ -175,7 +186,7 @@ class ML_model(BaseEstimator):
             -int, cross-validation generator or an iterable
             - if cv>1, generate splits by StratifyKfold method
         title
-            - title added to plot header
+            - title added to plot header as to indicate (X, y)
         return
         --------
         ax, mean-auc, std-auc,
@@ -424,17 +435,17 @@ class ML_model(BaseEstimator):
                 plot_name = 'plots/gridcv.pdf'
             self.folder.write(plt.gcf(), plot_name)
             plt.close()
-        
+
     @wraps(cross_val_score)
     def cv_score(self, X, y, scoring='roc_auc', cv=5, **kwargs):
         '''
         return cross validated score of estimator (see cross_val_score)
         ---------
         '''
-        estimator = self.estimator
         L = locals().copy()
         L.pop('self')
-        return cross_val_score(**get_kwargs(cross_validate, **L, **kwargs))
+        return cross_val_score(self.estimator,
+                               **get_kwargs(cross_validate, **L, **kwargs))
 
     @wraps(cross_validate)
     def cv_validate(self,
@@ -474,7 +485,7 @@ class ML_model(BaseEstimator):
             scores.append(
                 _validation._score(self.estimator, x0, y0, scorer,
                                    is_multimetric))
-        scores = pd.DataFrame(scores).reset_index()
+        scores = pd.DataFrame(scores).reset_index(drop=True)
         return scores
 
     @wraps(GridSearchCV)
@@ -570,20 +581,19 @@ class ML_model(BaseEstimator):
         if np.ndim(y_pre) > 1:
             y_pre = y_pre[:, pos_label]
         if pre_level:
-            y_pre, bins =  _binning(
+            y_pre, bins = _binning(
                 y_pre, bins=self.estimator.bins, labels=False)
         return y_pre
 
     def run_train(self,
-                  train_set,
-                  scoring=[
-                      'roc_auc', 'average_precision'],
-                  cv=5,
-                  q=10,
+                  train_set=None,
+                  title=None,
+                  scoring=['roc_auc', 'average_precision', 'neg_log_loss'],
+                  q=None,
                   bins=None,
                   max_leaf_nodes=None,
                   fit_params={},
-                  title=None,
+                  cv=3,
                   save_fig=True,
                   **kwargs):
         '''run training of an esimator and dump performance
@@ -595,15 +605,27 @@ class ML_model(BaseEstimator):
            n of cross validation folder, if cv==1, no cross validation        
         fit_params
             -other fit parameters of estimator
+            
+        return
+        ----
+        averaged train score
 
         '''
         L = locals().copy()
         L.pop('self')
-        # --
         folder = self.folder
-        # save train performance
+        # --
+        r = 0
+        if train_set is None:
+            train_set = self._get_dataset('.traindata')[0]
+            r -= 1
+        if r is 0:
+            folder.write(train_set, 'data/0.traindata')
+
+        # trainning
         X = train_set[0]
         y = train_set[1]
+        title = title if title is not None else 0
         traincv = self.plot_auc_traincv(
             X, y, **get_kwargs(self.plot_auc_traincv, **L), **fit_params)
 
@@ -611,98 +633,156 @@ class ML_model(BaseEstimator):
         lift_data = self.plot_lift(X, y, **get_kwargs(self.plot_lift, **L),
                                    **kwargs)
 
+        # save (X, y) data
+        cv_score = self.cv_validate(X, y, **get_kwargs(self.cv_validate, **L),
+                                    **kwargs)
         if self.verbose > 0:
             print('train data & cv_score & cv_splits data are being saved...')
-            # save (X, y) data
-            title = title if title is not None else 0
-            folder.write(train_set, 'data/train{}.data'.format(title))
-
-            cv_score = self.cv_validate(X, y,
-                                        **get_kwargs(self.cv_validate, **L),
-                                        **kwargs)
             folder.write([lift_data[-1], cv_score],
-                         'spreadsheet/train{}.xlsx'.format(title),
+                         'spreadsheet/TrainPerfomance{}.xlsx'.format(title),
                          sheet_name=['liftcurve', 'train_score'])
             folder.write(traincv[-1],
-                         'spreadsheet/train_datasplits{}.xlsx'.format(title))
+                         'spreadsheet/TrainSplits{}.xlsx'.format(title))
+        fig = plotter_score_path(cv_score, title='TrainScore_path')
+        if save_fig is True:
+            folder.write(fig, 'plots/TrainScore_path0.pdf')
+            plt.close()
+        return cv_score.mean()
 
     def run_test(self,
-                 test_set,
-                 cv=5,
+                 test_set=None,
+                 title=None,
                  q=None,
                  bins=None,
                  max_leaf_nodes=None,
                  use_self_bins=True,
-                 scoring=[
-                     'roc_auc', 'average_precision'],
-                 title=None,
+                 cv=3,
+                 scoring=['roc_auc', 'average_precision', 'neg_log_loss'],
                  save_fig=True,
                  **kwargs):
-        '''run test performance of an estimator, dump: [plots/spreadsheet] to 
-        self.path_    
+        '''run test performance of an estimator, dump lift curve and ROC
+        curve for test data under self.path_; optionally dump spreadsheets of
+        calculated data
         
         test_set:
-            2 element tuple (X_test, y_test)
+            2 element tuple (X_test, y_test) or list of them
+        title:
+            title for test_set indicator
         q
             - n equal frequency for lift curve 
+        
+        return
+        ----
+            averaged scoring mean
         '''
         L = locals().copy()
         L.pop('self')
-        # --
+        L.pop('title')
         folder = self.folder
-        # test performance
-        X_test = test_set[0]
-        y_test = test_set[1]
-        # plot test auc
-        testcv = self.plot_auc_test(
-            X_test, y_test, **get_kwargs(self.plot_auc_test, **L, **kwargs))
-        # plot lift curve
-        test_lift = self.plot_lift(X_test, y_test,
-                                   **get_kwargs(self.plot_lift, **L), **kwargs)
+        # --
 
-        if self.verbose > 0:
-            print('test cv_score & cv_splits test data are being saved... ')
-            title = title if title is not None else 0
-            folder.write(test_set, 'data/test{}.data'.format(title))
-            folder.write(testcv[-1],
-                         'spreadsheet/test_datasplits{}.xlsx'.format(title))
+        r = 0
+        if test_set is None:
+            test_set, title = self._get_dataset('.testdata')[0]
+            r -= 1
+
+        test_set_list = get_flat_list(test_set)
+        if title is not None:
+            title_list = get_flat_list(title)
+        else:
+            title_list = [str(i) for i in range(len(test_set_list))]
+        check_consistent_length(test_set_list, title_list)
+        if r is 0:
+            folder.write([test_set_list, title_list],
+                         'data/{}.testdata'.format(len(title_list)))
+
+        testscore = []
+        for i, j in zip(test_set_list, title_list):
+            # test performance
+            X_test = i[0]
+            y_test = i[1]
+            # plot test auc
+            testcv = self.plot_auc_test(
+                X_test,
+                y_test,
+                title=j,
+                **get_kwargs(self.plot_auc_test, **L, **kwargs))
+            # plot lift curve
+            test_lift = self.plot_lift(
+                X_test,
+                y_test,
+                title=j,
+                **get_kwargs(self.plot_lift, **L),
+                **kwargs)
             # test scores
             scores = self.test_score(X_test, y_test, cv=cv, scoring=scoring)
-            folder.write([test_lift[-1], scores],
-                         sheet_name=['lift_curve', 'test_score'],
-                         file='spreadsheet/test{}.xlsx'.format(title))
+            scores['group'] = str(j)
+            testscore.append(scores)
+            if self.verbose > 0:
+                print(
+                    'test cv_score & cv_splits test data are being saved... ')
+                folder.write(testcv[-1],
+                             file='spreadsheet/TestSplits{}.xlsx'.format(j))
+                folder.write(
+                    [test_lift[-1], scores],
+                    sheet_name=['lift_curve', 'test_score'],
+                    file='spreadsheet/TestPerfomance{}.xlsx'.format(j))
 
-    def run_sensitivity(self,
-                        train_set,
-                        param_grid,
-                        refit='roc_auc',
-                        scoring=['roc_auc', 'average_precision'],
-                        fit_params={},
-                        save_fig=True,
-                        title=None,
-                        n_jobs=-1,
-                        **kwargs):
-        '''run sensitivity of param_grid space, dump plots/spreadsheets
+        testscore_all = pd.concat(testscore, axis=0, ignore_index=True)
+        fig = plotter_score_path(testscore_all, title='score_path')
+        if save_fig is True:
+            folder.write(fig, 'plots/TestScore_path.pdf')
+            plt.close()
+        if self.verbose > 0 and len(testscore) > 1:
+            folder.write(testscore_all, 'spreadsheet/TestPerformanceAll.xlsx')
+
+        return testscore_all[scoring].mean()
+
+    def run_sensitivity(
+            self,
+            train_set=None,
+            title=None,
+            param_grid=-1,
+            refit='roc_auc',
+            scoring=['roc_auc', 'average_precision', 'neg_log_loss'],
+            fit_params={},
+            n_jobs=2,
+            save_fig=True,
+            **kwargs):
+        '''run sensitivity of param_grid space, update best estimator, 
+        dump plots/spreadsheets
         
         train_set: 
             2 element tuple, (X, y) of train data
         param_grid:
-            parameter grid space
+            parameter grid space, if -1, use pipe_grid() to return predifined 
+            param_grid
         **kwargs:
             GridSearchCV keywords
         '''
+
         L = locals().copy()
         L.pop('self')
+        L.pop('param_grid')
+        folder = self.folder
         #--
+        r = 0
+        if train_set is None:
+            train_set = self._get_dataset('.traindata')[0]
+            r -= 1
+        if r is 0:
+            folder.write(train_set, 'data/0.traindata')
+        if param_grid is -1:
+            param_grid = pipe_grid(self.estimator._final_estimator)
+
         # memory cache
         if isinstance(self.estimator, Pipeline):
             self.estimator.memory = os.path.relpath(
                 os.path.join(self.path_, 'tempfolder'))
 
-        folder = self.folder
         X, y = train_set
-        param_grid = L.pop('param_grid')
         cv_results = []
+        print('running sensitivity on param_grid: \n {}'.format(param_grid), )
         for i, grid in enumerate(get_flat_list(param_grid)):
             self.grid_searchcv(
                 X,
@@ -712,28 +792,49 @@ class ML_model(BaseEstimator):
                 **kwargs)
             self.plot_gridcv(save_fig=save_fig, title=str(i))
             cv_results.append(self.gridcv_results)
-       
+
         print('sensitivity results & data are being saved... ')
         title = 0 if title is None else str(title)
-        folder.write(cv_results, 
-                     'spreadsheet/sensitivity{}.xlsx'.format(title))
-        folder.write(train_set, 'data/sensitivity{}.data'.format(title))
-
-        self.save_estimator()
+        folder.write(cv_results,
+                     'spreadsheet/GridcvResults{}.xlsx'.format(title))
+        folder.write(train_set, 'data/{}.traindata'.format(title))
+        self.save()
         self._shut_temp_folder()
 
-    def save_estimator(self):
-        '''save current estimator and all construction settings
+    def run_analysis(self,
+                     train_set=None,
+                     max_leaf_nodes=None,
+                     cv=3, 
+                     test_set=None,
+                     q=None,
+                     bins=None,
+                     **kwargs):
+        '''run sensitivity, train & test in batch
+        '''
+        try:
+            self.run_sensitivity(cv=cv)
+        except:
+            print('param_grid sensitivity passed ... \n')
+
+        self.run_train(q=q, bins=bins, max_leaf_nodes=max_leaf_nodes, cv=cv)
+        self.run_test(use_self_bins=True, cv=cv)
+
+        self.save()
+
+    def save(self):
+        '''save current estimator instance, self instance 
+        and self construction settings
         '''
         folder = self.folder
         # save esimator
         folder.write(self.estimator,
                      _get_estimator_name(self.estimator) + '.estimator')
-        folder.write(self.get_params(),
-                     _get_estimator_name(self.estimator) + 'ML_parameters.pkl')
-        
-        folder.write(self, self.__class__.__name__ + '.model')
-    
+        folder.write(self.get_params(), self.__class__.__name__ + 'Param.pkl')
+
+        folder.write(
+            self, self.__class__.__name__ + _get_estimator_name(self.estimator)
+            + '.ml')
+
     def delete_model(self):
         '''delete self.path folder containing model
         '''
@@ -811,9 +912,9 @@ def _split_cv(*arrays, y=None, groups=None, cv=3, random_state=None):
         raise ValueError("At least one array required as input")
     validation.check_consistent_length(*arrays, y, groups)
     arrays = list(arrays)
-    
+
     if cv == 1:
-        if y is not None: 
+        if y is not None:
             arrays.append(y)
         return [[(i, i) for i in arrays]]
     # get cross validator
@@ -835,17 +936,6 @@ def _split_cv(*arrays, y=None, groups=None, cv=3, random_state=None):
     ] for train_index, test_index in cv.split(arrays[0], y, groups))
 
     return train_test
-
-
-def _get_estimator_name(estimator):
-    '''return estimator's class name
-    '''
-    if isinstance(estimator, Pipeline):
-        estimator = estimator._final_estimator
-    if is_classifier(estimator) or is_regressor(estimator):
-        return getattr(estimator, '__class__').__name__
-    else:
-        raise TypeError('esimator is not an sklearn estimator')
 
 
 def plotter_lift_curve(y_pre,
@@ -884,7 +974,7 @@ def plotter_lift_curve(y_pre,
     xlabel
         - xlabel for xaxis
     '''
-    y_cut, bins =  _binning(
+    y_cut, bins = _binning(
         y_pre,
         y_true=y_true,
         bins=bins,
@@ -907,6 +997,17 @@ def plotter_lift_curve(y_pre,
     return ax, y_cut, bins, plotted_data
 
 
+def _get_estimator_name(estimator):
+    '''return estimator's class name
+    '''
+    if isinstance(estimator, Pipeline):
+        estimator = estimator._final_estimator
+    if is_classifier(estimator) or is_regressor(estimator):
+        return getattr(estimator, '__class__').__name__
+    else:
+        raise TypeError('estimator is not an valid sklearn estimator')
+
+
 def _get_splits_combined(xy_splits, ret_type='test'):
     '''return list of combined X y DataFrame for cross validated test set
     '''
@@ -924,24 +1025,20 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_test
     if ret_type == 'train':
         return data_splits_train
-    
+
+
 if __name__ == '__main__':
     from sklearn.datasets import make_classification
     # Import some data to play with
     X, y = make_classification(1000)
     # test
-    estimator = 'clean_ordi_woe_fwoe_XGBClassifier'
+    estimator = 'clean_ordi_XGBClassifier'
     E = ML_model(estimator, path='../tests_model')
-    E.run_train((X, y), q=5, save_fig=True)
-    E.run_test((X, y), save_fig=True)
-    
-    try:
-        estimator = 'XGBClassifier'
-        grid = pipe_grid(estimator, True)
-        E.run_sensitivity((X,y), grid, cv=3, save_fig=True)
-    except:
-        pass
-    E.save_estimator()
-    E.delete_model()
+    E.run_sensitivity((X, y))
+    E.run_train(q=5)
+    E.run_test((X, y), cv=3, use_self_bins=True)
 
-    
+    E.save()
+
+    E.run_analysis(max_leaf_nodes=5)
+#    E.delete_model()
