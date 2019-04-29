@@ -42,14 +42,13 @@ class File(Desc):
         if os.path.isfile(file):
             self._x = os.path.relpath(file)
         else:
-            raise TypeError("file '{}' does not exist".format(file))
+            raise FileNotFoundError("file '{}' does not exist".format(file))
 
     def __delete__(self, instance):
         '''remove file
         '''
         os.remove(self._x)
         print("info: file '{}' removed".format(self._x))
-
 
 
 class NewFile(File):
@@ -70,7 +69,7 @@ class NewFile(File):
             self._x = file
         except Exception as e:
             print(repr(e))
-            raise ValueError('invalid path input {}'.format(file))
+            raise NotADirectoryError('invalid path input {}'.format(file))
 
 
 class Path(Desc):
@@ -84,7 +83,7 @@ class Path(Desc):
             self._x = os.path.relpath(path)
         except Exception as e:
             print(repr(e))
-            raise TypeError("invalid path input '%s' " % path)
+            raise NotADirectoryError("invalid path input '%s' " % path)
 
     def __delete__(self, instance):
 
@@ -93,7 +92,6 @@ class Path(Desc):
                 os.remove(os.path.join(root, i))
         shutil.rmtree(self._x, ignore_errors=True)
         print("info: path '{}' removed... \n".format(self._x))
-
 
 
 class Reader():
@@ -147,7 +145,7 @@ class Reader():
             path = self.path_
         else:
             path = os.path.join(self.path_, path)
-            
+
         file_dict = _get_files(path, suffix, subfolder)
 
         obj = _Obj()
@@ -343,6 +341,7 @@ def _save_plot(fig, file, **kwargs):
     '''save the figure obj , if fig is None, save the current figure
     '''
     fig.savefig(file, **kwargs)
+
 
 class Objs_management(Reader, Writer):
     def __init__(self, path):
