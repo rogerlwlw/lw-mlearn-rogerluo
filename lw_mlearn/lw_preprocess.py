@@ -34,7 +34,6 @@ from sklearn.ensemble import IsolationForest, ExtraTreesClassifier
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
-from sklearn.semi_supervised import label_propagation
 
 from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
@@ -215,7 +214,6 @@ def pipe_main(pipe=None):
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(
             n_jobs=-1),
         RUSBoostClassifier=RUSBoostClassifier(),
-        label_propagation=label_propagation(n_jobs=-1)
     )
 
     if pipe is None:
@@ -364,7 +362,7 @@ def _param_grid(estimator):
         },
     ]
     
-    label_propagation = [
+    LabelPropagation = [
             {'kernel' : ['rbf'], 'gamma' : np.logspace(-5, 1, 5)},
             {'kernel' : ['knn'], 
              'n_neighbors' : np.logspace(0, 1.2, 5).astype(int)},
@@ -517,7 +515,6 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         - all - all dtypes
     na
         - fill na with 'na' value, -999 default
-    ----
     '''
 
     def __init__(self, dtype_filter='not_datetime', verbose=0):
