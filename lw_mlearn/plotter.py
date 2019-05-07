@@ -266,7 +266,7 @@ def plotter_cv_results_(results,
             if not num_param:
                 df.index = np.arange(len(df.index))
         else:
-            xlabel = 'n_iteration'
+            xlabel = ' + '.join([i.split('__')[-1] for i in param_array])
 
         df.sort_index(inplace=True)
         # plot
@@ -279,7 +279,7 @@ def plotter_cv_results_(results,
             mean - std,
             mean + std,
             color='grey',
-            alpha=.3,
+            alpha=.2,
             label=r'$\pm$ 1 std. dev.')
         # annotate
         x_max = df.index[np.argmax(mean)]
@@ -474,7 +474,7 @@ def plotter_score_path(df_score, title=None, cm=None, style='-.o'):
     fig, ax = plt.subplots(n, 1, figsize=(i, j + 2.5 * (n // 2)))
     ax = get_flat_list(ax) if n == 1 else ax
     if cm is None:
-        cm = plt.get_cmap('tab20')
+        cm = plt.get_cmap('tab10')
     cmlist = [cm(i) for i in np.linspace(0, 1, n)]
 
     i = 0
