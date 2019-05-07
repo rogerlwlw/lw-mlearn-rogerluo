@@ -34,6 +34,26 @@ from functools import wraps
 from shutil import rmtree
 
 
+def train_models(estimator,
+                 train_set,
+                 test_set,
+                 test_title=None,
+                 max_leaf_nodes=10,
+                 verbose=1,
+                 **kwargs):
+    '''run ML_model analysis for given train_set, test_set
+    
+    parameter
+    ----
+    estimator str:
+        pipe_main() input str in format of 'xx_xx_xx[_xx]', see pipe_main()
+    '''
+    model = ML_model(estimator, path=estimator, verbose=verbose)
+    model.run_analysis(train_set, test_set, test_title, max_leaf_nodes,
+                       **kwargs)
+    return model
+
+
 class ML_model(BaseEstimator):
     '''quantifying predictions of an estimator
     
@@ -109,7 +129,7 @@ class ML_model(BaseEstimator):
         else:
             try:
                 gen, _ = self.folder.read_all(suffix='.estimator')
-                self.estimator = next(gen)
+                self.estimator = gen[0]
                 print('estimator {} has been read from {}'.format(
                     self.estimator.__class__.__name__, self.path_))
             except Exception as e:
@@ -158,7 +178,6 @@ class ML_model(BaseEstimator):
         '''return list of obj read from 'data' folder given suffix type
         '''
         gen, _ = self.folder.read_all(suffix, path='data')
-        gen = list(gen)
         if len(gen) is 0:
             raise FileNotFoundError(
                 "file with '{}' suffix not found in 'data' folder... \n".
@@ -588,7 +607,7 @@ class ML_model(BaseEstimator):
     def run_train(self,
                   train_set=None,
                   title=None,
-                  scoring=['roc_auc', 'average_precision', 'neg_log_loss'],
+                  scoring=['roc_auc', 'average_precision'],
                   q=None,
                   bins=None,
                   max_leaf_nodes=None,
@@ -596,8 +615,10 @@ class ML_model(BaseEstimator):
                   cv=3,
                   save_fig=True,
                   **kwargs):
-        '''run training of an esimator and dump performance
-        ([plots/spreadsheets]) to self.path_ folder
+        '''
+        - run train performance of an estimator; 
+        - dump lift curve and ROC curve for train data under self.path_; 
+        - optionally dump spreadsheets of calculated data
         
         train_set: 
             2 element tuple, (X, y) of train data
@@ -615,6 +636,7 @@ class ML_model(BaseEstimator):
         L.pop('self')
         folder = self.folder
         # --
+        title = title if title is not None else 0
         r = 0
         if train_set is None:
             train_set = self._get_dataset('.traindata')[0]
@@ -625,7 +647,6 @@ class ML_model(BaseEstimator):
         # trainning
         X = train_set[0]
         y = train_set[1]
-        title = title if title is not None else 0
         traincv = self.plot_auc_traincv(
             X, y, **get_kwargs(self.plot_auc_traincv, **L), **fit_params)
 
@@ -633,7 +654,6 @@ class ML_model(BaseEstimator):
         lift_data = self.plot_lift(X, y, **get_kwargs(self.plot_lift, **L),
                                    **kwargs)
 
-        # save (X, y) data
         cv_score = self.cv_validate(X, y, **get_kwargs(self.cv_validate, **L),
                                     **kwargs)
         if self.verbose > 0:
@@ -645,7 +665,7 @@ class ML_model(BaseEstimator):
                          'spreadsheet/TrainSplits{}.xlsx'.format(title))
         fig = plotter_score_path(cv_score, title='TrainScore_path')
         if save_fig is True:
-            folder.write(fig, 'plots/TrainScore_path0.pdf')
+            folder.write(fig, 'plots/TrainScore_path.pdf')
             plt.close()
         return cv_score.mean()
 
@@ -657,12 +677,13 @@ class ML_model(BaseEstimator):
                  max_leaf_nodes=None,
                  use_self_bins=True,
                  cv=3,
-                 scoring=['roc_auc', 'average_precision', 'neg_log_loss'],
+                 scoring=['roc_auc', 'average_precision'],
                  save_fig=True,
                  **kwargs):
-        '''run test performance of an estimator, dump lift curve and ROC
-        curve for test data under self.path_; optionally dump spreadsheets of
-        calculated data
+        '''
+        - run test performance of an estimator; 
+        - dump lift curve and ROC curve for test data under self.path_; 
+        - optionally dump spreadsheets of calculated data
         
         test_set:
             2 element tuple (X_test, y_test) or list of them
@@ -721,8 +742,8 @@ class ML_model(BaseEstimator):
             if self.verbose > 0:
                 print(
                     'test cv_score & cv_splits test data are being saved... ')
-                folder.write(testcv[-1],
-                             file='spreadsheet/TestSplits{}.xlsx'.format(j))
+                folder.write(
+                    testcv[-1], file='spreadsheet/TestSplits{}.xlsx'.format(j))
                 folder.write(
                     [test_lift[-1], scores],
                     sheet_name=['lift_curve', 'test_score'],
@@ -738,20 +759,23 @@ class ML_model(BaseEstimator):
 
         return testscore_all[scoring].mean()
 
-    def run_sensitivity(
-            self,
-            train_set=None,
-            title=None,
-            param_grid=-1,
-            refit='roc_auc',
-            scoring=['roc_auc', 'average_precision', 'neg_log_loss'],
-            fit_params={},
-            n_jobs=2,
-            save_fig=True,
-            **kwargs):
-        '''run sensitivity of param_grid space, update best estimator, 
-        dump plots/spreadsheets
+    def run_sensitivity(self,
+                        train_set=None,
+                        title=None,
+                        param_grid=-1,
+                        refit='roc_auc',
+                        scoring=['roc_auc', 'average_precision'],
+                        fit_params={},
+                        n_jobs=2,
+                        save_fig=True,
+                        **kwargs):
+        '''
+        - run sensitivity of param_grid; 
+        - update self estimator as best estimator, & update self gridcv_result;
+        - optionally dump plots/spreadsheets
         
+        parmameters
+        ----
         train_set: 
             2 element tuple, (X, y) of train data
         param_grid:
@@ -797,27 +821,53 @@ class ML_model(BaseEstimator):
         title = 0 if title is None else str(title)
         folder.write(cv_results,
                      'spreadsheet/GridcvResults{}.xlsx'.format(title))
-        folder.write(train_set, 'data/{}.traindata'.format(title))
         self.save()
         self._shut_temp_folder()
 
     def run_analysis(self,
                      train_set=None,
-                     max_leaf_nodes=None,
-                     cv=3, 
                      test_set=None,
+                     test_title=None,
+                     max_leaf_nodes=None,
                      q=None,
                      bins=None,
+                     cv=3,
+                     grid_search=True,
                      **kwargs):
-        '''run sensitivity, train & test in batch
         '''
-        try:
-            self.run_sensitivity(cv=cv)
-        except:
-            print('param_grid sensitivity passed ... \n')
+        - run sensitivity(if grid_search=True)
+        - run train 
+        - run test
+        - store self trainscore & testscore
+        '''
+        if grid_search is True:
+            try:
+                self.run_sensitivity(train_set)
+            except FileNotFoundError:
+                raise FileNotFoundError('train_set not found')
+            except Exception as e:
+                print('param_grid sensitivity run passed ... \n')
+                print(repr(e))
+                pass
 
-        self.run_train(q=q, bins=bins, max_leaf_nodes=max_leaf_nodes, cv=cv)
-        self.run_test(use_self_bins=True, cv=cv)
+        try:
+            self.trainscore = self.run_train(
+                train_set,
+                cv=cv,
+                q=q,
+                bins=bins,
+                max_leaf_nodes=max_leaf_nodes)
+        except MemoryError:
+            print('memory error has been encountered, grid_search passed...\n')
+            self.fit(train_set[0], train_set[1])
+            pass
+
+        try:
+           self.testscore = self.run_test(
+                test_set, title=test_title, cv=cv, use_self_bins=True)
+        except FileNotFoundError:
+            print('run_test passed due to None test_set')
+            pass
 
         self.save()
 
@@ -846,27 +896,25 @@ class ML_model(BaseEstimator):
         '''
         estimator = self.estimator
 
-        try:
-            if isinstance(estimator, Pipeline):
-                fn = None
-                steps = estimator.steps
-                n = len(steps) - 1
-                while n > -1:
-                    n -= 1
-                    tr = steps[n][1]
-                    if hasattr(tr, 'get_feature_names'):
-                        fn = tr.get_feature_names()
-                        if fn is not None: break
-                if fn is None:
-                    print('estimator has no feature_names attribute')
-                    return
-
-                tr = steps[-2][1]
+        if isinstance(estimator, Pipeline):
+            fn = None
+            su = None
+            steps = estimator.steps
+            n = len(steps) - 1
+            while n > -1:
+                n -= 1
+                tr = steps[n][1]
+                if hasattr(tr, 'get_feature_names'):
+                    fn = tr.get_feature_names()
+                    if fn is not None: break
                 if hasattr(tr, 'get_support'):
-                    fn = pd.Series(fn)[tr.get_support()]
-
-        except Exception as e:
-            print(repr(e))
+                    su = tr.get_support()
+                    
+            if fn is None:
+                print('estimator has no feature_names attribute')
+                return
+            if su is not None:
+                fn = pd.Series(fn)[su]
 
         return fn
 
@@ -1032,13 +1080,8 @@ if __name__ == '__main__':
     # Import some data to play with
     X, y = make_classification(1000)
     # test
-    estimator = 'clean_ordi_XGBClassifier'
-    E = ML_model(estimator, path='../tests_model')
-    E.run_sensitivity((X, y))
-    E.run_train(q=5)
-    E.run_test((X, y), cv=3, use_self_bins=True)
-
-    E.save()
-
-    E.run_analysis(max_leaf_nodes=5)
-#    E.delete_model()
+    l = ['clean_oht_fxgb_enn_XGBClassifier']
+    for i in l:        
+        model = train_models(i, (X, y), (X, y), max_leaf_nodes=10)
+        model.delete_model()
+        
