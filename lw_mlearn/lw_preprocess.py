@@ -12,25 +12,60 @@ import scipy.stats as stats
 from pandas.core.dtypes import api
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder,
-                                   PolynomialFeatures, StandardScaler, 
-                                   MinMaxScaler, RobustScaler, Normalizer,
-                                   QuantileTransformer, PowerTransformer)
+from sklearn.preprocessing import (
+    OrdinalEncoder, OneHotEncoder, PolynomialFeatures, StandardScaler,
+    MinMaxScaler, RobustScaler, Normalizer, QuantileTransformer,
+    PowerTransformer, MaxAbsScaler)
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import LinearSVC
-from sklearn.linear_model import SGDClassifier
-from sklearn.feature_selection import (SelectFromModel, GenericUnivariateSelect, 
-                                       chi2, f_classif, mutual_info_classif,
-                                       RFE)
-from sklearn.decomposition import PCA
+from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
+from sklearn.feature_selection import (SelectFromModel,
+                                       GenericUnivariateSelect, chi2,
+                                       f_classif, mutual_info_classif, RFE)
+from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic,
+                                              ExpSineSquared, DotProduct,
+                                              Exponentiation, ConstantKernel)
+from sklearn.decomposition import PCA, KernelPCA, IncrementalPCA
 from sklearn.utils import validation
 from sklearn.utils.testing import all_estimators
 from sklearn.ensemble import RandomTreesEmbedding
+from sklearn.ensemble import IsolationForest, ExtraTreesClassifier
+from sklearn.covariance import EllipticEnvelope
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.svm import OneClassSVM
+from sklearn.semi_supervised import label_propagation
 
 from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
+
+from imblearn.pipeline import Pipeline
+from imblearn.under_sampling import (
+    RandomUnderSampler,
+    TomekLinks,
+    NearMiss,
+    CondensedNearestNeighbour,
+    OneSidedSelection,
+    NeighbourhoodCleaningRule,
+    EditedNearestNeighbours,
+    AllKNN,
+    InstanceHardnessThreshold,
+)
+from imblearn.over_sampling import (
+    ADASYN,
+    RandomOverSampler,
+    SMOTE,
+    BorderlineSMOTE,
+    SVMSMOTE,
+    SMOTENC,
+)
+from imblearn.ensemble import (
+    EasyEnsembleClassifier,
+    BalancedRandomForestClassifier,
+    RUSBoostClassifier,
+)
+from imblearn.combine import SMOTEENN, SMOTETomek
+from imblearn import FunctionSampler
 
 from lw_mlearn.utilis import (dec_iferror_getargs, get_kwargs)
 from lw_mlearn.plotter import plotter_rateVol
@@ -56,53 +91,132 @@ def pipe_main(pipe=None):
         1) pipeline instance of chosen steps
         2) if pipe is None, a dict indicating possible choice of 'steps'
     '''
-    clean = {'clean': Split_cls('not_datetime')}
-    # 
+    clean = {
+        'clean': Split_cls('not_datetime'),
+    }
+    #
     encode = {
-        'oht': Cat_encoder(encode_type='oht'),
-        'ordi': Cat_encoder(encode_type='ordi'),
+        'oht': Cat_encoder(encode_type='oht', na1=-999),
+        'ordi': Cat_encoder(encode_type='ordi', na1=-999),
         'woe': Woe_encoder(max_leaf_nodes=5),
     }
-    
+
+    resample = {
+
+        # over_sampling
+        'rover':
+        RandomOverSampler(),
+        'smote':
+        SMOTE(),
+        'bsmote':
+        BorderlineSMOTE(),
+        'adasyn':
+        ADASYN(),
+
+        # under sampling controlled methods
+        'runder':
+        RandomUnderSampler(),
+        'nearmiss':
+        NearMiss(version=3),
+        'pcart':
+        InstanceHardnessThreshold(),
+
+        # under sampling cleaning methods
+        'tlinks':
+        TomekLinks(n_jobs=-1),
+        'oside':
+        OneSidedSelection(n_jobs=-1),
+        'cleanNN':
+        NeighbourhoodCleaningRule(n_jobs=-1),
+        'enn':
+        EditedNearestNeighbours(n_jobs=-1),
+        'ann':
+        AllKNN(n_jobs=-1),
+        'cnn':
+        CondensedNearestNeighbour(n_jobs=-1),
+
+        # clean outliers
+        'inlierForest':
+        FunctionSampler(
+            outlier_rejection, kw_args={'method': 'IsolationForest'}),
+        'inlierLocal':
+        FunctionSampler(
+            outlier_rejection, kw_args={'method': 'LocalOutlierFactor'}),
+        'inlierEllip':
+        FunctionSampler(
+            outlier_rejection, kw_args={'method': 'EllipticEnvelope'}),
+        'inlierOsvm':
+        FunctionSampler(outlier_rejection, kw_args={'method': 'OneClassSVM'}),
+        # combine
+        'smoteenn':
+        SMOTEENN(),
+        'smotelink':
+        SMOTETomek(),
+    }
+
     scale = {
-        'stdscale' : StandardScaler(),
-        'maxscale' : MinMaxScaler(),
-        'rscale' : RobustScaler(quantile_range=(10,90)),
-        'qauntile' : QuantileTransformer(), # uniform distribution
-        'power' :  PowerTransformer(), # Gaussian distribution
-        'norm' : Normalizer(),
-            }
+        'stdscale': StandardScaler(),
+        'maxs': MinMaxScaler(),
+        'rscale': RobustScaler(quantile_range=(10, 90)),
+        'qauntile': QuantileTransformer(),  # uniform distribution
+        'power': PowerTransformer(),  # Gaussian distribution
+        'norm': Normalizer(),  # default L2 norm
+
+        # scale sparse data
+        'maxabs': MaxAbsScaler(),
+        'stdscalesp': StandardScaler(with_mean=False),
+    }
     # feature construction
-    feature_c = {'pca': PCA(n_components='mle', whiten=True), 
-                 'poly': PolynomialFeatures(degree=2),
-                 'Rtree_embedding' : RandomTreesEmbedding(n_estimators=10)}
+    feature_c = {
+        'pca': PCA(n_components=0.85, whiten=True),
+        'ipca': IncrementalPCA(n_components=0.85, whiten=True),
+        'kpca': KernelPCA(n_components=0.85, kernel='rbf'),
+        'poly': PolynomialFeatures(degree=2),
+        'rtembedding': RandomTreesEmbedding(n_estimators=10)
+    }
     # select from model
     feature_m = {
-        'fsvc':
-        SelectFromModel(LinearSVC(C=0.01, penalty="l1", dual=False)),
-        'fSGD':
-        SelectFromModel(SGDClassifier(penalty="l1")),
-        'fxgb':
-        SelectFromModel(XGBClassifier(n_jobs=-1), threshold=1e-5),
-        'fcart':
-        SelectFromModel(
-            DecisionTreeClassifier(min_impurity_decrease=0.01),
-            threshold=1e-5),
         'fwoe':
-        SelectFromModel(Woe_encoder(max_leaf_nodes=5), threshold=0.019),
-        'fRFExgb' : RFE(XGBClassifier(n_jobs=-1), step=0.1),
-        'fRFEsvc' : RFE(LinearSVC(), step=0.1)        
+        SelectFromModel(Woe_encoder(max_leaf_nodes=5), threshold=0.02),
+        'flog':
+        SelectFromModel(
+            LogisticRegressionCV(
+                penalty='l1', solver='saga', scoring='roc_auc')),
+        'fsgd':
+        SelectFromModel(SGDClassifier(penalty="l1")),
+        'fsvm':
+        SelectFromModel(LinearSVC('l1', dual=False, C=1e-2)),
+        'fxgb':
+        SelectFromModel(XGBClassifier(n_jobs=-1)),
+        'frf':
+        SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5)),
+        
+        'fRFExgb':
+        RFE(XGBClassifier(n_jobs=-1), step=0.1),
+        'fRFErf':
+        RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5), step=0.1)
     }
     # Univariate feature selection
-    feature_u = {'fchi2' : GenericUnivariateSelect(chi2, 'percentile', 20),
-                 'fMutualclf' : GenericUnivariateSelect(mutual_info_classif,
-                                                    'percentile', 20),
-                'fFclf' : GenericUnivariateSelect(f_classif, 'percentile', 20),
-                 }
+    feature_u = {
+        'fchi2':
+        GenericUnivariateSelect(chi2, 'percentile', 20),
+        'fMutualclf':
+        GenericUnivariateSelect(mutual_info_classif, 'percentile', 20),
+        'fFclf':
+        GenericUnivariateSelect(f_classif, 'percentile', 20),
+    }
     # sklearn estimator
     t = all_estimators(type_filter=['classifier'])
     estimator = {i[0]: i[1]() for i in t}
-    estimator.update(XGBClassifier=XGBClassifier())
+    estimator.update(
+        XGBClassifier=XGBClassifier(n_jobs=-1),
+        LogisticRegressionCV=LogisticRegressionCV(scoring='roc_auc'),
+        EasyEnsembleClassifier=EasyEnsembleClassifier(n_jobs=-1),
+        BalancedRandomForestClassifier=BalancedRandomForestClassifier(
+            n_jobs=-1),
+        RUSBoostClassifier=RUSBoostClassifier(),
+        label_propagation=label_propagation(n_jobs=-1)
+    )
 
     if pipe is None:
         feature_s = {}
@@ -110,63 +224,31 @@ def pipe_main(pipe=None):
         return {
             'clean': clean.keys(),
             'encoding': encode.keys(),
-            'scale' : scale.keys(),
+            'resample': resample.keys(),
+            'scale': scale.keys(),
             'feature_c': feature_c.keys(),
             'feature_s': feature_s.keys(),
-            'estimator': estimator.keys()
+            'classifier': estimator.keys()
         }
     elif isinstance(pipe, str):
         l = pipe.split('_')
         all_keys_dict = {}
-        all_keys_dict.update(**clean, **encode, **scale, **feature_c, 
-                             **feature_m, **feature_u, **estimator)         
+        all_keys_dict.update(**clean, **encode, **scale, **feature_c,
+                             **feature_m, **feature_u, **estimator, **resample)
         steps = []
         for i in l:
             if all_keys_dict.get(i) is not None:
                 steps.append((i, all_keys_dict.get(i)))
             else:
-                raise ValueError(
-                    "'{}' is not valid key for sklearn estimators".format(i))
+                raise KeyError(
+                    "'{}' invalid key for sklearn estimators".format(i))
         return Pipeline(steps)
-                
+
     else:
         raise ValueError("input pipe must be a string in format 'xx[_xx]'")
 
-def _param_grid(estimator):
-    '''    
-    estimator:
-        str for sklearn estimator's name
-    '''    
-    XGBClassifier = [
-            {'reg_alpha': [1, 4, 8, 10, 15]},
-            {'reg_lamdbda': [1, 4, 8, 10, 15]},
-            {'min_child_weight': [0.1, 2, 4, 5, 8]},
-            {'scale_pos_weight': [0.1, 5, 10, 15, 20]},
-            {'max_depth': [2, 3]},
-            {'n_estimator' : np.linspace(50, 300, 5).astype(int)},
-            {'learning_rate': np.logspace(-3, 0, 5)}
-    ]
-    
-    SVC = [
-        {'kernel' : ['linear', 'poly', 'sigmoid', 'rbf']},
-        {'C' : np.logspace(-3, 3, 10)},
-        {'gamma': np.logspace(-3, 1, 10)},
-    ]
-    SGDClassifier = [
-            {'loss' : ['hinge', 'log', 'perceptron']},
-            {'penalty' : ['l2', 'l1', 'elasticnet']},
-            {'alpha' : np.logspace(-5, -1, 5)},
-            {'learning_rate' : [ 'adaptive', 'optimal', 'constant'], 
-             'eta0' : [0.01]},
-    ]
-    param_grids = locals().copy()            
-    grid = param_grids.get(estimator)
-    if grid is not None:
-        return grid
-    else:
-        raise ValueError('no param_grid returned')
 
-def pipe_grid(estimator, pipe_grid=False):
+def pipe_grid(estimator, pipe_grid=True):
     '''return saved param_grid of given estimator
     
     estimator
@@ -179,14 +261,156 @@ def pipe_grid(estimator, pipe_grid=False):
         keys = estimator
     else:
         keys = estimator.__class__.__name__
-        
+
     param_grid = _param_grid(keys)
     if pipe_grid is True:
-        param_grid = [
-            {'__'.join([keys, k]): i.get(k) for k in i.keys()}
-            for i in param_grid if api.is_dict_like(i)
-        ]
+        param_grid = [{'__'.join([keys, k]): i.get(k)
+                       for k in i.keys()} for i in param_grid
+                      if api.is_dict_like(i)]
     return param_grid
+
+
+def _param_grid(estimator):
+    '''    
+    estimator:
+        str for sklearn estimator's name
+    return
+    ----
+        param_grid dict
+    '''
+
+    XGBClassifier = [
+        {
+            'learning_rate': np.logspace(-3, 0, 5),
+            'n_estimator': np.linspace(50, 300, 6).astype(int),
+        },
+        {
+            'max_depth': [2, 3, 4]
+        },
+        {
+            'gamma': np.logspace(-1, 1, 5)
+        },
+        {
+            'reg_alpha': np.logspace(0, 1, 5),
+            'reg_lamdbda': np.logspace(0, 1, 5)
+        },
+        {
+            'scale_pos_weight': np.logspace(0, 1.5, 5)
+        },
+        {
+            'colsample_bytree': [1, 0.9, 0.8, 0.75],
+            'subsample': [1, 0.9, 0.8, 0.75],
+        },
+    ]
+
+    SVC = [
+        {
+            'kernel': [
+                'rbf',
+                'sigmoid',
+                'linear',
+                'poly',
+            ],
+            'probability': [True],
+        },
+        {
+            'gamma': np.logspace(-3, 3, 8),
+            'C': np.logspace(-3, 2, 5)
+         },
+    ]
+
+    RandomForestClassifier = [
+        {
+            'max_depth': range(3, 10),
+            'min_samples_leaf': np.logspace(-3, -1, 5),
+        },
+        {
+            'n_estimators': np.logspace(1.7, 2.5, 10).astype(int)
+        },
+    ]
+
+
+    AdaBoostClassifier = [
+            {# default base_estimator CART Tree(max_depth=1)
+            'learning_rate' : np.logspace(-2, 0, 5),
+            'n_estimators' : np.logspace(1.7, 2.5, 8).astype(int),
+            },
+
+    ]
+
+    GaussianProcessClassifier = [{
+        'kernel': [ConstantKernel() * RBF(),
+                   RationalQuadratic(),
+                   Matern()]
+    }]
+
+    DecisionTreeClassifier = [{
+        'max_depth': range(1, 4, 1),
+        'min_samples_leaf': np.logspace(-3, -1, 4),
+        'min_purity_decrease': [1e-3],
+    }]
+
+    SGDClassifier = [
+        {
+            'loss': ['hinge', 'log', 'perceptron']
+        },
+        {
+            'penalty': ['l2', 'l1', 'elasticnet'],
+            'alpha': np.logspace(-5, -1, 5)
+        },
+        {
+            'learning_rate': ['adaptive', 'optimal', 'constant'],
+            'eta0': [0.01]
+        },
+    ]
+    
+    label_propagation = [
+            {'kernel' : ['rbf'], 'gamma' : np.logspace(-5, 1, 5)},
+            {'kernel' : ['knn'], 
+             'n_neighbors' : np.logspace(0, 1.2, 5).astype(int)},
+            
+            ]
+
+    param_grids = locals().copy()
+    param_grids.update({
+        'RUSBoostClassifier':
+        param_grids.get('AdaBoostClassifier'),
+        'BalancedRandomForestClassifier':
+        param_grids.get('RandomForestClassifier')
+    })
+
+    grid = param_grids.get(estimator)
+
+    if grid is not None:
+        return grid
+    else:
+        raise KeyError(
+            "key '{}' not found, no param_grid returned".format(estimator))
+
+
+def outlier_rejection(X=None,
+                      y=None,
+                      method='IsolationForest',
+                      contamination=0.1):
+    """This will be our function used to resample our dataset.
+    """
+    outlier_model = (
+        IsolationForest(contamination=contamination),
+        LocalOutlierFactor(contamination=contamination),
+        OneClassSVM(nu=contamination),
+        EllipticEnvelope(contamination=contamination),
+    )
+
+    outlier_model = {i.__class__.__name__: i for i in outlier_model}
+
+    if X is None:
+        return outlier_model.keys()
+    model = outlier_model.get(method)
+    if model is None:
+        raise ValueError("method '{}' is invalid".format(method))
+    y_pred = model.fit_predict(X)
+    return X[y_pred == 1], y[y_pred == 1]
+
 
 class Base_clean():
     '''base cleaner
@@ -299,7 +523,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         L = locals().copy()
         L.pop('self')
         self.set_params(**L)
-               
+
     def fit(self, X, y=None):
         '''fit input_labels & out_labels 
         '''
@@ -307,14 +531,14 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         # drop na columns
         na_col = X.columns[X.apply(lambda x: all(x.isna()))]
         X.dropna(axis=1, how='all', inplace=True)
-        
+
         # drop uid cols
         uid_col = []
         for k, col in X.iteritems():
             if (api.is_object_dtype(col) or api.is_integer_dtype(col)) \
-            and len(pd.unique(col)) > 0.8*len(col):            
-                 X.drop(k, axis=1, inplace=True) 
-                 uid_col.append(k)
+            and len(pd.unique(col)) > 0.8*len(col):
+                X.drop(k, axis=1, inplace=True)
+                uid_col.append(k)
         # filter dtypes
         options = {
             'not_datetime': X.select_dtypes(exclude='datetime'),
@@ -324,14 +548,15 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
             'all': X
         }
         self.out_labels = options.get(self.dtype_filter).columns.tolist()
-       
+
         # --
         if len(na_col) > 0:
-            print('{} of columns are null , have been dropped \n'.format(
-                na_col))
+            print('{} of columns total {} are null , have been dropped \n'.
+                  format(na_col, len(na_col)))
         if len(uid_col) > 0:
-            print('{} of columns are uid , have been dropped \n'.format(
-                uid_col))
+            print(
+                '{} of columns total {} are uid , have been dropped \n'.format(
+                    uid_col, len(uid_col)))
 
         if self.verbose > 0:
             for k, i in options.items():
@@ -428,30 +653,33 @@ def to_num_datetime_df(X, thresh=0.8):
 
 
 class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
-    '''to encode feature matrix using auto-binning based on CART tree
-    gini impurity/bins or specified by edges = {col : edges}, calcualte woe &
-    iv of each feature
+    '''to woe_encode feature matrix using auto-binning based on CART tree
+    gini impurity/bins or specified by input bin edges = {col : edges},
+    calcualte woe & iv of each feature, NaN values will be binned independently
     
-    params:               
-        input_edges={}
-            - mannual input cutting edges as 
-            {colname : [-inf, point1, point2..., inf]}
-        cat_num_lim=10
-            - number of unique vals limit to be treated as continueous feature
-        max_leaf_nodes=5
-            - max number of bins
-        min_samples_leaf=0.05
-            - minimum number of samples in leaf node
-        min_samples_split=0.08
-            - the minimun number of samles required to split a node       
-        **tree_params
-            - other decision tree keywords
+    parameters
+    ------            
+    input_edges={}
+        - mannual input cutting edges as 
+        {colname : [-inf, point1, point2..., inf]}
+    cat_num_lim
+        - number of unique vals limit to be treated as continueous feature,
+        default 0
+    max_leaf_nodes=5
+        - max number of bins
+    min_samples_leaf=0.05
+        - minimum number of samples in leaf node
+    min_samples_split=0.08
+        - the minimun number of samles required to split a node       
+    **tree_params
+        - other decision tree keywords
         
     attributes
-    ----
+    -----
     edges 
         - dict={colname : [-inf, point1, point2..., inf]}; 
-        - 'fit' method will try to get edges by decision Tree algorithm
+        - 'fit' method will try to get edges by decision Tree algorithm or
+        pandas cut method
     woe_map
         - dict={colname : {category : woe, ...}}
     woe_iv
@@ -460,7 +688,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         - iv value of each feature
       
     method
-    ----
+    -----
     fit 
         - calculate woe & iv values for each col categories, obtain 
         self edges & woe_map
@@ -473,15 +701,15 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
     path_ = Path()
 
     def __init__(self,
-                 cat_num_lim=10,
                  input_edges={},
+                 cat_num_lim=0,
                  q=None,
                  bins=None,
                  max_leaf_nodes=None,
-                 min_samples_leaf=0.1,
+                 min_samples_leaf=0.05,
                  min_samples_split=0.1,
                  criterion='gini',
-                 min_impurity_decrease=0.005,
+                 min_impurity_decrease=1e-3,
                  min_impurity_split=None,
                  random_state=0,
                  splitter='best',
@@ -492,8 +720,8 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         self.set_params(**L)
 
     def _get_binned(self, X):
-        '''to get binned matrix using self edges, 
-        cols without cutting edges will remain unchaged
+        '''to get binned matrix using self edges, cols without cutting edges
+        will remain unchaged
         '''
         if self.edges is None:
             raise Exception('no bin edges, perform fit first')
@@ -542,27 +770,19 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         ----
         df --> X woe encoded value
         '''
-
-        def _mapping(x, mapper):
-            try:
-                if x in mapper: return mapper.get(x)
-                if pd.isna(x): return mapper.get(np.nan)
-                for k, v in mapper.items():
-                    if x in k: return v
-            except Exception as e:
-                raise Exception
-                print(e, x, k, v)
-
         X = self._filter_labels(X)
         # --
         woe_map = self.woe_map
         cols = []
         cols_notcoded = []
-
         for name, col in X.iteritems():
             if name in woe_map:
                 mapper = woe_map.get(name)
-                cols.append(col.apply(_mapping, mapper=mapper))
+                if mapper.get(np.nan) is not None:
+                    na = mapper.pop(np.nan)
+                    cols.append(col.map(mapper).fillna(na))
+                else:
+                    cols.append(col.map(mapper).fillna(0))
             else:
                 cols_notcoded.append(col.name)
 
@@ -608,9 +828,9 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
             plt.close()
 
 
-@dec_iferror_getargs
 def _tree_univar_bin(arr_x, arr_y, **kwargs):
     '''univariate binning based on binary decision Tree
+    
     return
     ----
     ndarray of binning edges
@@ -626,7 +846,7 @@ def _tree_univar_bin(arr_x, arr_y, **kwargs):
     thresh = clf.tree_.threshold
     feature = clf.tree_.feature
     thresh = np.unique(thresh[(feature >= 0).nonzero()]).round(
-        kwargs.get('decimal', 4))
+        kwargs.get('decimal', 8))
     cut_edges = np.append(np.append(-np.inf, thresh), np.inf)
     return np.unique(cut_edges)
 
@@ -653,7 +873,7 @@ def _mono_cut(Y, X):
 
 def bin_tree(X,
              y,
-             cat_num_lim=5,
+             cat_num_lim=0,
              max_leaf_nodes=10,
              min_samples_leaf=0.05,
              random_state=0,
@@ -661,7 +881,7 @@ def bin_tree(X,
              **kwargs):
     '''discrete features based on univariate run of DecisionTree classifier
     (CART tree - gini impurity as criterion, not numeric dtype will be igored,
-    unique number of vals less than "cat_num_lim" will be ignored)
+    unique number of values less than "cat_num_lim" will be ignored)
     
     df_X 
         - df, contain feature matrix, should be numerical dtype
@@ -675,6 +895,7 @@ def bin_tree(X,
         - minimum number of samples in leaf node
     **kwargs
         - other tree keywords
+    
     return
     ----
     bin_edges
@@ -685,8 +906,9 @@ def bin_tree(X,
     cols = []
     un_split = []
     for name, col in X.iteritems():
-        col_notna = col.dropna()
-        y_notna = y[col_notna.index]
+        df = pd.DataFrame({'x': col, 'y': y})
+        col_notna = df.dropna().x
+        y_notna = df.dropna().y
         if (len(pd.unique(col_notna)) > cat_num_lim
                 and api.is_numeric_dtype(col_notna)):
             # call _tree_univar_bin
@@ -726,7 +948,8 @@ def _binning(y_pre=None,
              y_true=None,
              labels=None,
              **kwargs):
-    '''  
+    '''supervised binning of y_pre based on y_true if y_true is not None
+    
     y_pre
         - array_like, value of y to be cut
     y_true
@@ -760,7 +983,7 @@ def _binning(y_pre=None,
             'must and only 1 of (q, bins, max_leaf_nodes) can be specified')
 
     if q is not None:
-        bins = np.percentile(y_pre, np.linspace(0, 100, q + 1)).round(4)
+        bins = np.percentile(y_pre, np.linspace(0, 100, q + 1))
         bins[0] = -np.Inf
         bins[-1] = np.Inf
 
@@ -792,16 +1015,22 @@ def _woe_binning(X,
                  q=None,
                  bins=None,
                  max_leaf_nodes=None,
-                 cat_num_lim=5,
+                 cat_num_lim=0,
                  **kwargs):
-    '''use by Woe_encoder
+    '''use by Woe_encoder to get binning edges
+    
+    return
+    ----
+    edges:
+        {colname : [-inf, point1, point2..., inf]}
     '''
     bin_edges = {}
     for name, col in X.iteritems():
-        col_notna = col.dropna()
-        y_notna = y[col_notna.index]
-        if (len(pd.unique(col_notna)) > cat_num_lim
-                and api.is_numeric_dtype(col_notna)):
+        df = pd.DataFrame({'x': col, 'y': y})
+        col_notna = df.dropna().x
+        y_notna = df.dropna().y
+        if (len(pd.unique(col_notna)) > cat_num_lim \
+            and api.is_numeric_dtype(col_notna)):
             label, bin_edges[name] = _binning(
                 col_notna, bins, q, max_leaf_nodes, y_notna, **kwargs)
     return bin_edges
@@ -809,9 +1038,11 @@ def _woe_binning(X,
 
 @dec_iferror_getargs
 def _single_woe(X, Y, var_name='VAR'):
-    '''calculate woe and iv for single binned feature X, with binary Y target
+    '''calculate woe and iv for single binned X feature, with binary Y target
     
     - y=1 event; y=0 non_event 
+    - na value in X will be grouped independently
+    
     return
     ----
     df, of WOE, IVI and IV_SUM ...
@@ -835,32 +1066,42 @@ def _single_woe(X, Y, var_name='VAR'):
         })
         d3 = pd.concat([d3, d4], axis=0, ignore_index=True, sort=True)
 
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        d3["EVENT_RATE"] = d3.EVENT / d3.COUNT
-        d3["NON_EVENT_RATE"] = d3.NONEVENT / d3.COUNT
-        d3["DIST_EVENT"] = d3.EVENT / d3.sum().EVENT
-        d3["DIST_NON_EVENT"] = d3.NONEVENT / d3.sum().NONEVENT
-        d3["WOE"] = np.log(d3.DIST_EVENT / d3.DIST_NON_EVENT)
-        d3["IV"] = (d3.DIST_EVENT - d3.DIST_NON_EVENT) * np.log(
-            d3.DIST_EVENT / d3.DIST_NON_EVENT)
+    # add 1 when event or nonevent count equals 0
+    dc = d3.copy()
+    dc.EVENT.replace(0, 1, True)
+    dc.NONEVENT.replace(0, 1, True)
+    dc["EVENT_RATE"] = dc.EVENT / dc.COUNT
+    dc["NON_EVENT_RATE"] = dc.NONEVENT / dc.COUNT
+    dc["DIST_EVENT"] = dc.EVENT / dc.sum().EVENT
+    dc["DIST_NON_EVENT"] = dc.NONEVENT / dc.sum().NONEVENT
+    # add 1 when event or nonevent count equals 0
+
+    d3["EVENT_RATE"] = d3.EVENT / d3.COUNT
+    d3["NON_EVENT_RATE"] = d3.NONEVENT / d3.COUNT
+    d3["DIST_EVENT"] = d3.EVENT / d3.sum().EVENT
+    d3["DIST_NON_EVENT"] = d3.NONEVENT / d3.sum().NONEVENT
+    d3["WOE"] = np.log(dc.DIST_EVENT / dc.DIST_NON_EVENT)
+    d3["IV"] = (dc.DIST_EVENT - dc.DIST_NON_EVENT) * np.log(
+        dc.DIST_EVENT / dc.DIST_NON_EVENT)
 
     d3["FEATURE_NAME"] = var_name
     d3 = d3[[
         'FEATURE_NAME', 'CATEGORY', 'COUNT', 'EVENT', 'EVENT_RATE', 'NONEVENT',
         'NON_EVENT_RATE', 'DIST_EVENT', 'DIST_NON_EVENT', 'WOE', 'IV'
     ]]
-    d3 = d3.replace([np.inf, -np.inf], 0)
+
     d3['IV_SUM'] = d3.IV.sum()
     d3 = d3.reset_index(drop=True)
     return d3
 
 
 def calc_woe(df_binned, y):
-    '''calculate woe and iv for binned feature_matrix 'df_binned', bins/category 
-    will be str dtype (contained as df with a binary 'y' target)
-        - woe = 0 if event/non_event = 0
+    '''calculate woe and iv 
+    
+    df_binned
+        - binned feature_matrix
+    y
+        - binary 'y' target   
     
     return
     ----
@@ -868,6 +1109,7 @@ def calc_woe(df_binned, y):
             'VAR_NAME','CATEGORY', 'COUNT', 'EVENT', 'EVENT_RATE',
             'NONEVENT', 'NON_EVENT_RATE', 'DIST_EVENT','DIST_NON_EVENT',
             'WOE', 'IV' ]
+    
     woe_map = {'colname' : {category : woe}}
     
     iv series
@@ -885,6 +1127,7 @@ def calc_woe(df_binned, y):
         woe_map[name] = dict(col_iv[['CATEGORY', 'WOE']].values)
         iv.append(col_iv.IV.sum())
         var_names.append(name)
+
     # concatenate col_iv
     woe_iv = pd.concat(l, axis=0, ignore_index=True)
     print('total of {} cols get woe & iv'.format(len(l)))
@@ -893,8 +1136,10 @@ def calc_woe(df_binned, y):
 
 
 class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
-    ''' transform categorical features to ordinal or one-hot encoded, other 
-    columns remain unchanged
+    ''' 
+    - transform categorical features to ordinal or one-hot encoded; 
+    - other numeric features scaled by Robustscaler(10,90); 
+    - all nan values be encoded 
     
     parameters
     -----
@@ -958,6 +1203,8 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X = self._fit(X)
         obj_cols = X.columns[X.dtypes.apply(api.is_object_dtype)].tolist()
         not_obj = X.columns[~X.dtypes.apply(api.is_object_dtype)].tolist()
+        print('{} of columns {} are object dtype'.format(
+            len(obj_cols), obj_cols))
         # --
         if self.encode_type == 'ordi':
             encoder = OrdinalEncoder()
@@ -968,8 +1215,9 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
 
         imput = SimpleImputer(strategy=self.strategy, fill_value=self.na0)
         imput_n = SimpleImputer(strategy=self.strategy, fill_value=self.na1)
+        rob = RobustScaler(quantile_range=(10, 90))
         features = [([i], [imput, encoder]) for i in obj_cols]
-        not_obj_features = [([i], imput_n) for i in not_obj]
+        not_obj_features = [([i], [rob, imput_n]) for i in not_obj]
         features.extend(not_obj_features)
 
         self.encoder = DataFrameMapper(
@@ -992,68 +1240,3 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X = self._check_categories(X)
         rst = self.encoder.transform(X)
         return rst
-
-
-class Tree_embedding(BaseEstimator, TransformerMixin, Base_clean):
-    '''Transform your features into a higher dimensional, sparse space using 
-    'apply'method of decision trees or ensemble of trees. 
-    Each sample goes through the decisions of each tree of the ensemble and 
-    ends up in one leaf per tree. the indices of leaf node is then 
-    one-hot-encoded to get new higher, sparse feature space
-    
-    parameters
-    ----
-    estimator
-        - estimator instance like decision tree, random forests, GBM
-    
-    attributes
-    ----
-    see Base_clean attributes
-    '''
-
-    def __init__(self, estimator_=None):
-        ''' '''
-        if not hasattr(estimator_, 'apply'):
-            self._raise_error(0)
-        if not hasattr(estimator_, 'fit'):
-            self._raise_error(1)
-        self.estimator_ = estimator_
-
-    def _raise_error(self, n):
-        ''' '''
-        if n == 0:
-            raise AttributeError("'estimator' has no 'apply' method")
-        if n == 1:
-            raise AttributeError("'estimator' has no 'fit'  method")
-
-    def fit(self, X, y=None, **fit_params):
-        ''' fit estimator and one hot encoder
-        '''
-        X = self._fit(X)
-        # --
-        estimator = self.estimator_
-        estimator.fit(X, y, **fit_params)
-        # --
-        X_app = self.estimator_.apply(X)
-        Oht = OneHotEncoder(handle_unknown='ignore', sparse=False)
-        X_app = self._check_df(X_app)
-        Oht.fit(X_app)
-        # --
-        self.encoder = Oht
-        cat_names = Oht.categories_
-        self.out_labels = [
-            '_'.join([str(i), str(a)]) for i, j in zip(X.columns, cat_names)
-            for a in j
-        ]
-        return self
-
-    def transform(self, X):
-        '''transform data as leaf nodes indices '''
-        X = self._filter_labels(X)
-        # --
-        estimator = self.estimator_
-        encoder = self.encoder
-        X_app = self._check_df(estimator.apply(X))
-        X_tr = encoder.transform(X_app)
-
-        return X_tr

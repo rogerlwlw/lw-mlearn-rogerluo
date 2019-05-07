@@ -15,6 +15,7 @@
 
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
 #==============================================================================#
+dist/
 build/
 *.egg-info
 .cache/
@@ -23,3 +24,4 @@ build/
 tests/
 .spyproject/
 /.coverage
+
