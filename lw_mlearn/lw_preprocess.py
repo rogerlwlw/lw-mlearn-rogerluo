@@ -501,8 +501,10 @@ class Base_clean():
 
 
 class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
-    '''clean(convert to numeric/str); filter columns of specific dtypes; 
-    store input & output columns; drop all na columns  
+    '''
+    - clean(convert to numeric/str & drop na or uid columns); 
+    - filter columns of specific dtypes; 
+    - store input & output columns; drop all na columns 
     
     params
     ---- 
