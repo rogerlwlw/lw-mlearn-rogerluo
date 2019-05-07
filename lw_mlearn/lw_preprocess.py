@@ -13,28 +13,32 @@ from pandas.core.dtypes import api
 
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder,
-                                   PolynomialFeatures, StandardScaler,
-                                   MinMaxScaler, RobustScaler, Normalizer,
-                                   QuantileTransformer, PowerTransformer)
+from sklearn.preprocessing import (
+    OrdinalEncoder, OneHotEncoder, PolynomialFeatures, StandardScaler,
+    MinMaxScaler, RobustScaler, Normalizer, QuantileTransformer,
+    PowerTransformer, MaxAbsScaler)
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
 from sklearn.feature_selection import (SelectFromModel,
                                        GenericUnivariateSelect, chi2,
                                        f_classif, mutual_info_classif, RFE)
-from sklearn.decomposition import PCA
+from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic,
+                                              ExpSineSquared, DotProduct,
+                                              Exponentiation, ConstantKernel)
+from sklearn.decomposition import PCA, KernelPCA, IncrementalPCA
 from sklearn.utils import validation
 from sklearn.utils.testing import all_estimators
 from sklearn.ensemble import RandomTreesEmbedding
-from sklearn.gaussian_process.kernels import RBF
-from sklearn.ensemble import IsolationForest
+from sklearn.ensemble import IsolationForest, ExtraTreesClassifier
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
+from sklearn.semi_supervised import label_propagation
 
 from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
+
 from imblearn.pipeline import Pipeline
 from imblearn.under_sampling import (
     RandomUnderSampler,
@@ -55,9 +59,12 @@ from imblearn.over_sampling import (
     SVMSMOTE,
     SMOTENC,
 )
-
+from imblearn.ensemble import (
+    EasyEnsembleClassifier,
+    BalancedRandomForestClassifier,
+    RUSBoostClassifier,
+)
 from imblearn.combine import SMOTEENN, SMOTETomek
-
 from imblearn import FunctionSampler
 
 from lw_mlearn.utilis import (dec_iferror_getargs, get_kwargs)
@@ -116,17 +123,17 @@ def pipe_main(pipe=None):
 
         # under sampling cleaning methods
         'tlinks':
-        TomekLinks('all'),
+        TomekLinks(n_jobs=-1),
+        'oside':
+        OneSidedSelection(n_jobs=-1),
+        'cleanNN':
+        NeighbourhoodCleaningRule(n_jobs=-1),
         'enn':
         EditedNearestNeighbours(n_jobs=-1),
         'ann':
         AllKNN(n_jobs=-1),
         'cnn':
         CondensedNearestNeighbour(n_jobs=-1),
-        'Oside':
-        OneSidedSelection(n_jobs=-1),
-        'cleanNN':
-        NeighbourhoodCleaningRule(n_jobs=-1),
 
         # clean outliers
         'inlierForest':
@@ -149,36 +156,45 @@ def pipe_main(pipe=None):
 
     scale = {
         'stdscale': StandardScaler(),
-        'maxscale': MinMaxScaler(),
+        'maxs': MinMaxScaler(),
         'rscale': RobustScaler(quantile_range=(10, 90)),
         'qauntile': QuantileTransformer(),  # uniform distribution
         'power': PowerTransformer(),  # Gaussian distribution
-        'norm': Normalizer(),
+        'norm': Normalizer(),  # default L2 norm
+
+        # scale sparse data
+        'maxabs': MaxAbsScaler(),
+        'stdscalesp': StandardScaler(with_mean=False),
     }
     # feature construction
     feature_c = {
-        'pca': PCA(n_components='mle', whiten=True),
+        'pca': PCA(n_components=0.85, whiten=True),
+        'ipca': IncrementalPCA(n_components=0.85, whiten=True),
+        'kpca': KernelPCA(n_components=0.85, kernel='rbf'),
         'poly': PolynomialFeatures(degree=2),
-        'RTembedding': RandomTreesEmbedding(n_estimators=10)
+        'rtembedding': RandomTreesEmbedding(n_estimators=10)
     }
     # select from model
     feature_m = {
+        'fwoe':
+        SelectFromModel(Woe_encoder(max_leaf_nodes=5), threshold=0.02),
         'flog':
-        SelectFromModel(LogisticRegressionCV(penalty='l1')),
+        SelectFromModel(
+            LogisticRegressionCV(
+                penalty='l1', solver='saga', scoring='roc_auc')),
         'fsgd':
         SelectFromModel(SGDClassifier(penalty="l1")),
+        'fsvm':
+        SelectFromModel(LinearSVC('l1', dual=False, C=1e-2)),
         'fxgb':
-        SelectFromModel(XGBClassifier(n_jobs=-1), threshold=1e-5),
-        'fcart':
-        SelectFromModel(
-            DecisionTreeClassifier(min_impurity_decrease=0.01),
-            threshold=1e-5),
-        'fwoe':
-        SelectFromModel(Woe_encoder(max_leaf_nodes=5), threshold=0.019),
+        SelectFromModel(XGBClassifier(n_jobs=-1)),
+        'frf':
+        SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5)),
+        
         'fRFExgb':
         RFE(XGBClassifier(n_jobs=-1), step=0.1),
-        'fRFEsvc':
-        RFE(LinearSVC(), step=0.1)
+        'fRFErf':
+        RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5), step=0.1)
     }
     # Univariate feature selection
     feature_u = {
@@ -192,7 +208,15 @@ def pipe_main(pipe=None):
     # sklearn estimator
     t = all_estimators(type_filter=['classifier'])
     estimator = {i[0]: i[1]() for i in t}
-    estimator.update(XGBClassifier=XGBClassifier(n_jobs=-1))
+    estimator.update(
+        XGBClassifier=XGBClassifier(n_jobs=-1),
+        LogisticRegressionCV=LogisticRegressionCV(scoring='roc_auc'),
+        EasyEnsembleClassifier=EasyEnsembleClassifier(n_jobs=-1),
+        BalancedRandomForestClassifier=BalancedRandomForestClassifier(
+            n_jobs=-1),
+        RUSBoostClassifier=RUSBoostClassifier(),
+        label_propagation=label_propagation(n_jobs=-1)
+    )
 
     if pipe is None:
         feature_s = {}
@@ -204,7 +228,7 @@ def pipe_main(pipe=None):
             'scale': scale.keys(),
             'feature_c': feature_c.keys(),
             'feature_s': feature_s.keys(),
-            'estimator': estimator.keys()
+            'classifier': estimator.keys()
         }
     elif isinstance(pipe, str):
         l = pipe.split('_')
@@ -254,48 +278,84 @@ def _param_grid(estimator):
     ----
         param_grid dict
     '''
+
     XGBClassifier = [
         {
             'learning_rate': np.logspace(-3, 0, 5),
-            'n_estimator': np.linspace(50, 300, 5).astype(int)
+            'n_estimator': np.linspace(50, 300, 6).astype(int),
         },
         {
             'max_depth': [2, 3, 4]
         },
         {
-            'gamma': np.logspace(0, 1, 5)
+            'gamma': np.logspace(-1, 1, 5)
         },
         {
-            'reg_alpha': np.logspace(0, 1, 5)
-        },
-        {
+            'reg_alpha': np.logspace(0, 1, 5),
             'reg_lamdbda': np.logspace(0, 1, 5)
         },
         {
             'scale_pos_weight': np.logspace(0, 1.5, 5)
         },
+        {
+            'colsample_bytree': [1, 0.9, 0.8, 0.75],
+            'subsample': [1, 0.9, 0.8, 0.75],
+        },
     ]
 
     SVC = [
         {
-            'kernel': ['linear', 'poly', 'sigmoid', 'rbf']
+            'kernel': [
+                'rbf',
+                'sigmoid',
+                'linear',
+                'poly',
+            ],
+            'probability': [True],
         },
         {
-            'C': np.logspace(-3, 3, 10)
+            'gamma': np.logspace(-3, 3, 8),
+            'C': np.logspace(-3, 2, 5)
+         },
+    ]
+
+    RandomForestClassifier = [
+        {
+            'max_depth': range(3, 10),
+            'min_samples_leaf': np.logspace(-3, -1, 5),
         },
         {
-            'gamma': np.logspace(-3, 1, 10)
+            'n_estimators': np.logspace(1.7, 2.5, 10).astype(int)
         },
     ]
+
+
+    AdaBoostClassifier = [
+            {# default base_estimator CART Tree(max_depth=1)
+            'learning_rate' : np.logspace(-2, 0, 5),
+            'n_estimators' : np.logspace(1.7, 2.5, 8).astype(int),
+            },
+
+    ]
+
+    GaussianProcessClassifier = [{
+        'kernel': [ConstantKernel() * RBF(),
+                   RationalQuadratic(),
+                   Matern()]
+    }]
+
+    DecisionTreeClassifier = [{
+        'max_depth': range(1, 4, 1),
+        'min_samples_leaf': np.logspace(-3, -1, 4),
+        'min_purity_decrease': [1e-3],
+    }]
 
     SGDClassifier = [
         {
             'loss': ['hinge', 'log', 'perceptron']
         },
         {
-            'penalty': ['l2', 'l1', 'elasticnet']
-        },
-        {
+            'penalty': ['l2', 'l1', 'elasticnet'],
             'alpha': np.logspace(-5, -1, 5)
         },
         {
@@ -303,9 +363,24 @@ def _param_grid(estimator):
             'eta0': [0.01]
         },
     ]
+    
+    label_propagation = [
+            {'kernel' : ['rbf'], 'gamma' : np.logspace(-5, 1, 5)},
+            {'kernel' : ['knn'], 
+             'n_neighbors' : np.logspace(0, 1.2, 5).astype(int)},
+            
+            ]
 
     param_grids = locals().copy()
+    param_grids.update({
+        'RUSBoostClassifier':
+        param_grids.get('AdaBoostClassifier'),
+        'BalancedRandomForestClassifier':
+        param_grids.get('RandomForestClassifier')
+    })
+
     grid = param_grids.get(estimator)
+
     if grid is not None:
         return grid
     else:
@@ -317,7 +392,8 @@ def outlier_rejection(X=None,
                       y=None,
                       method='IsolationForest',
                       contamination=0.1):
-    """This will be our function used to resample our dataset."""
+    """This will be our function used to resample our dataset.
+    """
     outlier_model = (
         IsolationForest(contamination=contamination),
         LocalOutlierFactor(contamination=contamination),
@@ -633,7 +709,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
                  min_samples_leaf=0.05,
                  min_samples_split=0.1,
                  criterion='gini',
-                 min_impurity_decrease=1e-6,
+                 min_impurity_decrease=1e-3,
                  min_impurity_split=None,
                  random_state=0,
                  splitter='best',
@@ -872,7 +948,8 @@ def _binning(y_pre=None,
              y_true=None,
              labels=None,
              **kwargs):
-    '''  
+    '''supervised binning of y_pre based on y_true if y_true is not None
+    
     y_pre
         - array_like, value of y to be cut
     y_true
@@ -940,7 +1017,7 @@ def _woe_binning(X,
                  max_leaf_nodes=None,
                  cat_num_lim=0,
                  **kwargs):
-    '''use by Woe_encoder
+    '''use by Woe_encoder to get binning edges
     
     return
     ----
@@ -1059,8 +1136,10 @@ def calc_woe(df_binned, y):
 
 
 class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
-    ''' transform categorical features to ordinal or one-hot encoded, other 
-    columns remain unchanged
+    ''' 
+    - transform categorical features to ordinal or one-hot encoded; 
+    - other numeric features scaled by Robustscaler(10,90); 
+    - all nan values be encoded 
     
     parameters
     -----
@@ -1136,8 +1215,9 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
 
         imput = SimpleImputer(strategy=self.strategy, fill_value=self.na0)
         imput_n = SimpleImputer(strategy=self.strategy, fill_value=self.na1)
+        rob = RobustScaler(quantile_range=(10, 90))
         features = [([i], [imput, encoder]) for i in obj_cols]
-        not_obj_features = [([i], imput_n) for i in not_obj]
+        not_obj_features = [([i], [rob, imput_n]) for i in not_obj]
         features.extend(not_obj_features)
 
         self.encoder = DataFrameMapper(
