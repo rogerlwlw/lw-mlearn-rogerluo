@@ -1080,7 +1080,7 @@ if __name__ == '__main__':
     # Import some data to play with
     X, y = make_classification(1000)
     # test
-    l = ['clean_oht_fxgb_enn_XGBClassifier']
+    l = ['clean_SVC']
     for i in l:        
         model = train_models(i, (X, y), (X, y), max_leaf_nodes=10)
         model.delete_model()
