@@ -149,13 +149,12 @@ class Reader():
         file_dict = _get_files(path, suffix, subfolder)
 
         obj = _Obj()
+        gen = []
         for k, v in file_dict.items():
             load = self.read(v, **kwargs)
             if load is not None:
                 setattr(obj, k.replace('.', '_'), load)
-
-        gen = (self.read(v, **kwargs) for v in file_dict.values()
-               if self.read(v, **kwargs) is not None)
+                gen.append(load)
         return gen, obj
 
 
