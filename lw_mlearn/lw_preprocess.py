@@ -756,7 +756,6 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         df_binned = self._get_binned(X)
         self.woe_iv, self.woe_map, self.feature_importances_ = calc_woe(
             df_binned, y)
-        print(self.woe_iv[['FEATURE_NAME', 'CATEGORY', 'WOE', 'IV_SUM']], '\n')
         return self
 
     def transform(self, X):
