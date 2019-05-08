@@ -637,11 +637,9 @@ class ML_model(BaseEstimator):
         folder = self.folder
         # --
         title = title if title is not None else 0
-        r = 0
         if train_set is None:
             train_set = self._get_dataset('.traindata')[0]
-            r -= 1
-        if r is 0:
+        else:
             folder.write(train_set, 'data/0.traindata')
 
         # trainning
@@ -770,9 +768,9 @@ class ML_model(BaseEstimator):
                         save_fig=True,
                         **kwargs):
         '''
-        - run sensitivity of param_grid; 
-        - update self estimator as best estimator, & update self gridcv_result;
-        - optionally dump plots/spreadsheets
+        - run sensitivity of param_grid (if param_grid=-1, use pre-difined); 
+        - update self estimator as best estimator, & update self gridcv_results;
+        - dump plots/spreadsheets
         
         parmameters
         ----
@@ -790,14 +788,21 @@ class ML_model(BaseEstimator):
         L.pop('param_grid')
         folder = self.folder
         #--
-        r = 0
         if train_set is None:
             train_set = self._get_dataset('.traindata')[0]
-            r -= 1
-        if r is 0:
+        else:
             folder.write(train_set, 'data/0.traindata')
-        if param_grid is -1:
-            param_grid = pipe_grid(self.estimator._final_estimator)
+        
+        if param_grid is -1:           
+            param_grid = []
+            for k, v in self.estimator.named_steps.items():
+                grid = pipe_grid(k)
+                if grid is not None:
+                    param_grid.extend(pipe_grid(k))
+        
+        if len(param_grid) == 0:
+            print('no param_grid found, skip grid search')
+            return
 
         # memory cache
         if isinstance(self.estimator, Pipeline):
@@ -835,38 +840,26 @@ class ML_model(BaseEstimator):
                      grid_search=True,
                      **kwargs):
         '''
-        - run sensitivity(if grid_search=True)
-        - run train 
-        - run test
+        - run self.run_sensitivity(if grid_search=True)
+        - run self.run_train 
+        - run self.run_test
         - store self trainscore & testscore
         '''
         if grid_search is True:
-            try:
-                self.run_sensitivity(train_set)
-            except FileNotFoundError:
-                raise FileNotFoundError('train_set not found')
-            except Exception as e:
-                print('param_grid sensitivity run passed ... \n')
-                print(repr(e))
-                pass
+            self.run_sensitivity(train_set)
 
-        try:
-            self.trainscore = self.run_train(
-                train_set,
-                cv=cv,
-                q=q,
-                bins=bins,
-                max_leaf_nodes=max_leaf_nodes)
-        except MemoryError:
-            print('memory error has been encountered, grid_search passed...\n')
-            self.fit(train_set[0], train_set[1])
-            pass
+        self.trainscore = self.run_train(
+            train_set,
+            cv=cv,
+            q=q,
+            bins=bins,
+            max_leaf_nodes=max_leaf_nodes)
 
         try:
            self.testscore = self.run_test(
                 test_set, title=test_title, cv=cv, use_self_bins=True)
         except FileNotFoundError:
-            print('run_test passed due to None test_set')
+            print('None test_set data, skip run_test ')
             pass
 
         self.save()
