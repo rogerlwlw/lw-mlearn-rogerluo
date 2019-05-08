@@ -1216,7 +1216,6 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
 
         imput = SimpleImputer(strategy=self.strategy, fill_value=self.na0)
         imput_n = SimpleImputer(strategy=self.strategy, fill_value=self.na1)
-        rob = RobustScaler(quantile_range=(10, 90))
         features = [([i], [imput, encoder]) for i in obj_cols]
         
         if self.rscale is True:           
@@ -1225,7 +1224,6 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         else:
             not_obj_features = [([i], [imput_n]) for i in not_obj]
             
-
         features.extend(not_obj_features)
 
         self.encoder = DataFrameMapper(
