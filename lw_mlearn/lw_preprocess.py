@@ -499,8 +499,10 @@ class Base_clean():
 
 
 class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
-    '''clean(convert to numeric/str); filter columns of specific dtypes; 
-    store input & output columns; drop all na columns  
+    '''
+    - clean(convert to numeric/str & drop na or uid columns); 
+    - filter columns of specific dtypes; 
+    - store input & output columns; drop all na columns 
     
     params
     ---- 
@@ -513,7 +515,6 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         - all - all dtypes
     na
         - fill na with 'na' value, -999 default
-    ----
     '''
 
     def __init__(self, dtype_filter='not_datetime', verbose=0):
@@ -755,7 +756,6 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         df_binned = self._get_binned(X)
         self.woe_iv, self.woe_map, self.feature_importances_ = calc_woe(
             df_binned, y)
-        print(self.woe_iv[['FEATURE_NAME', 'CATEGORY', 'WOE', 'IV_SUM']], '\n')
         return self
 
     def transform(self, X):
@@ -1173,7 +1173,10 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
                  strategy='constant',
                  na0='null',
                  na1=-999,
+                 rscale=True,
                  df_out=False):
+        '''
+        '''
         L = locals().copy()
         L.pop('self')
         self.set_params(**L)
@@ -1215,7 +1218,14 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         imput_n = SimpleImputer(strategy=self.strategy, fill_value=self.na1)
         rob = RobustScaler(quantile_range=(10, 90))
         features = [([i], [imput, encoder]) for i in obj_cols]
-        not_obj_features = [([i], [rob, imput_n]) for i in not_obj]
+        
+        if self.rscale is True:           
+            scale = RobustScaler(quantile_range=(10, 90))
+            not_obj_features = [([i], [scale, imput_n]) for i in not_obj]
+        else:
+            not_obj_features = [([i], [imput_n]) for i in not_obj]
+            
+
         features.extend(not_obj_features)
 
         self.encoder = DataFrameMapper(
