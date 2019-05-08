@@ -167,9 +167,9 @@ def pipe_main(pipe=None):
     }
     # feature construction
     feature_c = {
-        'pca': PCA(n_components=0.85, whiten=True),
-        'ipca': IncrementalPCA(n_components=0.85, whiten=True),
-        'kpca': KernelPCA(n_components=0.85, kernel='rbf'),
+        'pca': PCA(n_components=0.95, whiten=True),
+        'ipca': IncrementalPCA(n_components=0.95, whiten=True),
+        'kpca': KernelPCA(n_components=0.95, kernel='rbf'),
         'poly': PolynomialFeatures(degree=2),
         'rtembedding': RandomTreesEmbedding(n_estimators=10)
     }
