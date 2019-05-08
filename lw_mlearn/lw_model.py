@@ -1079,9 +1079,5 @@ if __name__ == '__main__':
     from sklearn.datasets import make_classification
     # Import some data to play with
     X, y = make_classification(1000)
-    # test
-    l = ['clean_SVC']
-    for i in l:        
-        model = train_models(i, (X, y), (X, y), max_leaf_nodes=10)
-        model.delete_model()
+
         
