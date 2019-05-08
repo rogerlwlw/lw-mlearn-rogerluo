@@ -1174,7 +1174,10 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
                  strategy='constant',
                  na0='null',
                  na1=-999,
+                 rscale=True,
                  df_out=False):
+        '''
+        '''
         L = locals().copy()
         L.pop('self')
         self.set_params(**L)
@@ -1214,9 +1217,14 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
 
         imput = SimpleImputer(strategy=self.strategy, fill_value=self.na0)
         imput_n = SimpleImputer(strategy=self.strategy, fill_value=self.na1)
-        rob = RobustScaler(quantile_range=(10, 90))
         features = [([i], [imput, encoder]) for i in obj_cols]
-        not_obj_features = [([i], [rob, imput_n]) for i in not_obj]
+        
+        if self.rscale is True:           
+            scale = RobustScaler(quantile_range=(10, 90))
+            not_obj_features = [([i], [scale, imput_n]) for i in not_obj]
+        else:
+            not_obj_features = [([i], [imput_n]) for i in not_obj]
+            
         features.extend(not_obj_features)
 
         self.encoder = DataFrameMapper(
