@@ -17,7 +17,7 @@ of:
     - select from test statisics (chi2, mutual-info, woe);
     - pca decomposition
     - RFE
-4) over/under sampling
+4) over/under resampling
 5) model training;
 6) cross validation, 
 7) hyper parameter tuning(grid_search), 
