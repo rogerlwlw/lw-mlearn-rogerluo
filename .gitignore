@@ -119,8 +119,6 @@ dmypy.json
 dist/
 build/
 *.egg-info
-.cache/
-.idea/
 tests/
 
 
