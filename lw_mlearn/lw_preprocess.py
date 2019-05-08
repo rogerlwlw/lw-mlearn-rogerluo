@@ -26,7 +26,27 @@ from sklearn.feature_selection import (SelectFromModel,
 from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic,
                                               ExpSineSquared, DotProduct,
                                               Exponentiation, ConstantKernel)
-from sklearn.decomposition import PCA, KernelPCA, IncrementalPCA
+from sklearn.decomposition import (
+   DictionaryLearning,
+   FastICA,
+   IncrementalPCA,
+   KernelPCA,
+   MiniBatchDictionaryLearning,
+   MiniBatchSparsePCA,
+   NMF,
+   PCA,
+   SparseCoder,
+   SparsePCA,
+   dict_learning,
+   dict_learning_online,
+   fastica,
+   non_negative_factorization,
+   randomized_svd,
+   sparse_encode,
+   FactorAnalysis,
+   TruncatedSVD,
+   LatentDirichletAllocation)
+
 from sklearn.utils import validation
 from sklearn.utils.testing import all_estimators
 from sklearn.ensemble import RandomTreesEmbedding
@@ -167,9 +187,10 @@ def pipe_main(pipe=None):
     }
     # feature construction
     feature_c = {
-        'pca': PCA(n_components=0.95, whiten=True),
-        'ipca': IncrementalPCA(n_components=0.95, whiten=True),
-        'kpca': KernelPCA(n_components=0.95, kernel='rbf'),
+        'pca': PCA(n_components='mle', whiten=True),
+        'spca' : SparsePCA(20, normalize_components=True),
+        'ipca': IncrementalPCA(whiten=True),
+        'kpca': KernelPCA(kernel='rbf'),
         'poly': PolynomialFeatures(degree=2),
         'rtembedding': RandomTreesEmbedding(n_estimators=10)
     }
@@ -261,11 +282,16 @@ def pipe_grid(estimator, pipe_grid=True):
         keys = estimator.__class__.__name__
 
     param_grid = _param_grid(keys)
+    
+    if param_grid is None:
+        return
+    
     if pipe_grid is True:
-        param_grid = [{'__'.join([keys, k]): i.get(k)
-                       for k in i.keys()} for i in param_grid
-                      if api.is_dict_like(i)]
-    return param_grid
+        return [{'__'.join([keys, k]): i.get(k)
+                for k in i.keys()} for i in param_grid
+                if api.is_dict_like(i)]
+    else:
+        return param_grid
 
 
 def _param_grid(estimator):
@@ -379,11 +405,9 @@ def _param_grid(estimator):
 
     grid = param_grids.get(estimator)
 
-    if grid is not None:
-        return grid
-    else:
-        raise KeyError(
-            "key '{}' not found, no param_grid returned".format(estimator))
+    if grid is None:       
+        print("key '{}' not found, no param_grid returned".format(estimator))
+    return grid
 
 
 def outlier_rejection(X=None,
