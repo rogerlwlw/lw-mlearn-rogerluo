@@ -54,6 +54,7 @@ from sklearn.ensemble import IsolationForest, ExtraTreesClassifier
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
+from sklearn.neural_network import MLPClassifier
 
 from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
@@ -235,6 +236,7 @@ def pipe_main(pipe=None):
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(
             n_jobs=-1),
         RUSBoostClassifier=RUSBoostClassifier(),
+        MLPClassifier=MLPClassifier(activation='identity'),
     )
 
     if pipe is None:
@@ -389,6 +391,15 @@ def _param_grid(estimator):
             'learning_rate': ['adaptive', 'optimal', 'constant'],
             'eta0': [0.01]
         },
+    ]
+    
+    MLPClassifier = [           
+            {'hidden_layer_sizes' : 
+                [(100, 2), (50, 10, 2), (10, 10, 10), (20, 10, 10)],
+            'activation' : ['identity']},
+            {'alpha' : np.logspace(-7, -1, 10) },
+            
+    
     ]
     
     LabelPropagation = [
