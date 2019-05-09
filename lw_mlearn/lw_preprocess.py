@@ -287,9 +287,8 @@ def pipe_grid(estimator, pipe_grid=True):
         return
     
     if pipe_grid is True:
-        return [{'__'.join([keys, k]): i.get(k)
-                for k in i.keys()} for i in param_grid
-                if api.is_dict_like(i)]
+        return [{'__'.join([keys, k]): i.get(k) for k in i.keys()} 
+                for i in param_grid if api.is_dict_like(i)]
     else:
         return param_grid
 
@@ -334,15 +333,16 @@ def _param_grid(estimator):
                 'rbf',
                 'sigmoid',
                 'linear',
-                'poly',
             ],
             'probability': [True], 
             'n_jobs' : [-1]
         },
         {
-            'gamma': np.logspace(-3, 0, 8),
+            'gamma': np.logspace(-3, 1, 8),
+        },
+        {
             'C': np.logspace(-3, 3, 5)
-         },
+        }
     ]
 
     RandomForestClassifier = [
@@ -374,7 +374,7 @@ def _param_grid(estimator):
     DecisionTreeClassifier = [{
         'max_depth': range(1, 4, 1),
         'min_samples_leaf': np.logspace(-3, -1, 4),
-        'min_purity_decrease': [1e-3],
+        'min_impurity_decrease': [1e-3],
     }]
 
     SGDClassifier = [
@@ -398,7 +398,16 @@ def _param_grid(estimator):
             
             ]
 
-    KernelPCA = [{'gamma' : np.logspace(-5, 0, 5)}]
+    kpca = [{'kernel' : ['linear', 'sigmoid', 'rbf']},
+            {'alpha' : np.logspace(0, 2, 5)},
+            {'gamma' : np.logspace(-5, 0, 5)}]
+    
+    spca = [
+            {'n_components' : np.logspace(1.2, 2, 5).astype(int)},
+            {'alpha' : np.logspace(-1, 3, 5)}
+            
+    ]
+    
     
     param_grids = locals().copy()
     param_grids.update({
