@@ -40,16 +40,18 @@ def train_models(estimator,
                  test_title=None,
                  max_leaf_nodes=10,
                  verbose=1,
+                 grid_search=True,
                  **kwargs):
-    '''run ML_model analysis for given train_set, test_set
+    '''run ML_model analysis for given train_set, test_set & estimator
     
     parameter
     ----
     estimator str:
         pipe_main() input str in format of 'xx_xx_xx[_xx]', see pipe_main()
     '''
-    model = ML_model(estimator, path=estimator, verbose=verbose)
+    model = ML_model(estimator, estimator, verbose=verbose)
     model.run_analysis(train_set, test_set, test_title, max_leaf_nodes,
+                       grid_search=grid_search,
                        **kwargs)
     return model
 
@@ -70,12 +72,12 @@ class ML_model(BaseEstimator):
        
     attributes
     -----
-    path_
+    path
         - directory to read/dump object from 
     gridcv_results
         - cv_results after running grid_searchcv
     folder
-        - read_write object to load/dump datafiles from self.path_
+        - read_write object to load/dump datafiles from self.folder.path_
     estimator.bins
         - bin edges of predictions of estimator
     
@@ -106,18 +108,17 @@ class ML_model(BaseEstimator):
 
     def __init__(self,
                  estimator=None,
-                 path='model',
+                 folder='model',
                  seed=0,
                  verbose=1,
                  pos_label=1):
         '''   
         '''
-        self.folder = Objs_management(path)
-        self.path_ = self.folder.path_
+        self.folder = Objs_management(folder)
         self.verbose = verbose
         self.pos_label = pos_label
-        self.gridcv_results = None
         self.seed = seed
+        self.gridcv_results = None
 
         if estimator is not None:
             if isinstance(estimator, str):
@@ -131,7 +132,7 @@ class ML_model(BaseEstimator):
                 gen, _ = self.folder.read_all(suffix='.estimator')
                 self.estimator = gen[0]
                 print('estimator {} has been read from {}'.format(
-                    self.estimator.__class__.__name__, self.path_))
+                    self.estimator.__class__.__name__, self.folder.path_))
             except Exception as e:
                 print(repr(e))
                 raise ValueError('no estimator input')
@@ -617,7 +618,7 @@ class ML_model(BaseEstimator):
                   **kwargs):
         '''
         - run train performance of an estimator; 
-        - dump lift curve and ROC curve for train data under self.path_; 
+        - dump lift curve and ROC curve for train data under self.folder.path_; 
         - optionally dump spreadsheets of calculated data
         
         train_set: 
@@ -680,7 +681,7 @@ class ML_model(BaseEstimator):
                  **kwargs):
         '''
         - run test performance of an estimator; 
-        - dump lift curve and ROC curve for test data under self.path_; 
+        - dump lift curve and ROC curve for test data under self.folder.path_; 
         - optionally dump spreadsheets of calculated data
         
         test_set:
@@ -798,7 +799,7 @@ class ML_model(BaseEstimator):
             for k, v in self.estimator.named_steps.items():
                 grid = pipe_grid(k)
                 if grid is not None:
-                    param_grid.extend(pipe_grid(k))
+                    param_grid.extend(grid)
         
         if len(param_grid) == 0:
             print('no param_grid found, skip grid search')
@@ -807,7 +808,7 @@ class ML_model(BaseEstimator):
         # memory cache
         if isinstance(self.estimator, Pipeline):
             self.estimator.memory = os.path.relpath(
-                os.path.join(self.path_, 'tempfolder'))
+                os.path.join(self.folder.path_, 'tempfolder'))
 
         X, y = train_set
         cv_results = []
@@ -837,7 +838,7 @@ class ML_model(BaseEstimator):
                      q=None,
                      bins=None,
                      cv=3,
-                     grid_search=True,
+                     grid_search=False,
                      **kwargs):
         '''
         - run self.run_sensitivity(if grid_search=True)
@@ -879,7 +880,7 @@ class ML_model(BaseEstimator):
             + '.ml')
 
     def delete_model(self):
-        '''delete self.path folder containing model
+        '''delete self.folder.path_ folder containing model
         '''
         del self.folder.path_
 
