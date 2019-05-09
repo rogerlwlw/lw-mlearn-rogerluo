@@ -128,13 +128,12 @@ class ML_model(BaseEstimator):
             else:
                 raise ValueError('invalid estimator input')
         else:
-            try:
-                gen, _ = self.folder.read_all(suffix='.estimator')
+            gen, _ = self.folder.read_all(suffix='.estimator')
+            if len(gen) > 0:
                 self.estimator = gen[0]
                 print('estimator {} has been read from {}'.format(
-                    self.estimator.__class__.__name__, self.folder.path_))
-            except Exception as e:
-                print(repr(e))
+                        self.estimator.__class__.__name__, self.folder.path_))
+            else:               
                 raise ValueError('no estimator input')
 
     def _shut_temp_folder(self):
