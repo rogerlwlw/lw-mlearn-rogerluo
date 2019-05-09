@@ -98,7 +98,7 @@ def pipe_main(pipe=None):
     .. note::
         data flows through a pipeline consisting of steps as below:
             raw data --> clean --> encoding --> scaling --> feature construction 
-            --> feature selection --> final estimator
+            --> feature selection --> resampling --> final estimator
             see scikit-learn preprocess & estimators
     parameter
     ----
@@ -188,9 +188,9 @@ def pipe_main(pipe=None):
     # feature construction
     feature_c = {
         'pca': PCA(n_components='mle', whiten=True),
-        'spca' : SparsePCA(20, normalize_components=True),
+        'spca' : SparsePCA(20, normalize_components=True, n_jobs=-1),
         'ipca': IncrementalPCA(whiten=True),
-        'kpca': KernelPCA(kernel='rbf'),
+        'kpca': KernelPCA(kernel='rbf', n_jobs=-1),
         'poly': PolynomialFeatures(degree=2),
         'rtembedding': RandomTreesEmbedding(n_estimators=10)
     }
@@ -307,6 +307,7 @@ def _param_grid(estimator):
         {
             'learning_rate': np.logspace(-3, 0, 5),
             'n_estimator': np.linspace(50, 300, 6).astype(int),
+            'n_jobs' : [-1]
         },
         {
             'max_depth': [2, 3, 4]
@@ -335,11 +336,12 @@ def _param_grid(estimator):
                 'linear',
                 'poly',
             ],
-            'probability': [True],
+            'probability': [True], 
+            'n_jobs' : [-1]
         },
         {
-            'gamma': np.logspace(-3, 3, 8),
-            'C': np.logspace(-3, 2, 5)
+            'gamma': np.logspace(-3, 0, 8),
+            'C': np.logspace(-3, 3, 5)
          },
     ]
 
@@ -365,7 +367,8 @@ def _param_grid(estimator):
     GaussianProcessClassifier = [{
         'kernel': [ConstantKernel() * RBF(),
                    RationalQuadratic(),
-                   Matern()]
+                   Matern()],
+        'n_jobs' : [-1]
     }]
 
     DecisionTreeClassifier = [{
@@ -395,6 +398,8 @@ def _param_grid(estimator):
             
             ]
 
+    KernelPCA = [{'gamma' : np.logspace(-5, 0, 5)}]
+    
     param_grids = locals().copy()
     param_grids.update({
         'RUSBoostClassifier':
@@ -406,7 +411,8 @@ def _param_grid(estimator):
     grid = param_grids.get(estimator)
 
     if grid is None:       
-        print("key '{}' not found, no param_grid returned".format(estimator))
+        print("param_grid not returned due to key '{}' not found".format(
+                estimator))
     return grid
 
 
