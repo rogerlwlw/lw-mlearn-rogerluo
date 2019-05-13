@@ -176,7 +176,7 @@ def pipe_main(pipe=None):
 
     scale = {
         'stdscale': StandardScaler(),
-        'maxs': MinMaxScaler(),
+        'maxscale': MinMaxScaler(),
         'rscale': RobustScaler(quantile_range=(10, 90)),
         'qauntile': QuantileTransformer(),  # uniform distribution
         'power': PowerTransformer(),  # Gaussian distribution
@@ -340,7 +340,7 @@ def _param_grid(estimator):
             'n_jobs' : [-1]
         },
         {
-            'gamma': np.logspace(-3, 1, 8),
+            'gamma': np.logspace(-5, 1, 8),
         },
         {
             'C': np.logspace(-3, 3, 5)
@@ -395,9 +395,9 @@ def _param_grid(estimator):
     
     MLPClassifier = [           
             {'hidden_layer_sizes' : 
-                [(100, 2), (50, 10, 2), (10, 10, 10), (20, 10, 10)],
+                [(100, ), (200, ), (500, ), (100, 20), (100, 50)],
             'activation' : ['identity']},
-            {'alpha' : np.logspace(-7, -1, 10) },
+            {'alpha' : np.logspace(-3, 3, 10) },
             
     
     ]
