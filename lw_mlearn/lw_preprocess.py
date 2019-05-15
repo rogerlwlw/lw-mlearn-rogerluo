@@ -270,7 +270,7 @@ def pipe_main(pipe=None):
 
 
 def pipe_grid(estimator, pipe_grid=True):
-    '''return saved param_grid of given estimator
+    '''return pre-defined param_grid of given estimator
     
     estimator
         - str or sklearn estimator instance
@@ -307,18 +307,18 @@ def _param_grid(estimator):
     XGBClassifier = [
         {
             'learning_rate': np.logspace(-3, 0, 5),
-            'n_estimator': np.linspace(50, 300, 6).astype(int),
+            'n_estimators': np.linspace(50, 300, 6).astype(int),
             'n_jobs' : [-1]
         },
         {
-            'max_depth': [2, 3, 4]
+            'max_depth': [2, 3, 4, 5]
         },
         {
             'gamma': np.logspace(-1, 1, 5)
         },
         {
             'reg_alpha': np.logspace(0, 1, 5),
-            'reg_lamdbda': np.logspace(0, 1, 5)
+            'reg_lambda': np.logspace(0, 1, 5)
         },
         {
             'scale_pos_weight': np.logspace(0, 1.5, 5)
@@ -336,8 +336,6 @@ def _param_grid(estimator):
                 'sigmoid',
                 'linear',
             ],
-            'probability': [True], 
-            'n_jobs' : [-1]
         },
         {
             'gamma': np.logspace(-5, 1, 8),
@@ -395,9 +393,9 @@ def _param_grid(estimator):
     
     MLPClassifier = [           
             {'hidden_layer_sizes' : 
-                [(100, ), (200, ), (500, ), (100, 20), (100, 50)],
-            'activation' : ['identity']},
-            {'alpha' : np.logspace(-3, 3, 10) },
+                [(1000, ), (300, 10), (500, 10), (400, 20), (200, 50)],
+                'alpha' : np.logspace(-3, 3, 10)
+            },
             
     
     ]
@@ -431,8 +429,10 @@ def _param_grid(estimator):
     grid = param_grids.get(estimator)
 
     if grid is None:       
-        print("param_grid not returned due to key '{}' not found".format(
+        print("key '{}' not found, param_grid not returned".format(
                 estimator))
+    else:
+        print("param_grid for '{}' returned as : \n {}".format(estimator, grid))
     return grid
 
 
