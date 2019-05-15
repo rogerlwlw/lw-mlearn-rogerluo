@@ -1222,7 +1222,7 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
                  encode_type='oht',
                  strategy='constant',
                  na0='null',
-                 na1=-999,
+                 na1=-99,
                  rscale=True,
                  df_out=False):
         '''
