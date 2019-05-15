@@ -810,8 +810,7 @@ class ML_model(BaseEstimator):
                 os.path.join(self.folder.path_, 'tempfolder'))
 
         X, y = train_set
-        cv_results = []
-        print('running sensitivity on param_grid: \n {}'.format(param_grid), )
+        cv_results = []        
         for i, grid in enumerate(get_flat_list(param_grid)):
             self.grid_searchcv(
                 X,
@@ -854,10 +853,12 @@ class ML_model(BaseEstimator):
             q=q,
             bins=bins,
             max_leaf_nodes=max_leaf_nodes)
+        print(self.trainscore, '\n')
 
         try:
            self.testscore = self.run_test(
                 test_set, title=test_title, cv=cv, use_self_bins=True)
+           print(self.testscore, '\n')
         except FileNotFoundError:
             print('None test_set data, skip run_test ')
             pass
@@ -1073,7 +1074,7 @@ if __name__ == '__main__':
     # Import some data to play with
     X, y = make_classification(1000)
     # test
-    l = ['clean_oht_spca_DecisionTreeClassifier']
+    l = ['clean_oht_XGBClassifier']
     # 
     for i in l:        
         model = train_models(i, (X, y), (X, y), max_leaf_nodes=10)
