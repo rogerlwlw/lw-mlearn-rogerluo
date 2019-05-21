@@ -106,18 +106,25 @@ class ML_model(BaseEstimator):
         plot  grid seach cv results of model
     '''
 
+    def from_config(config):
+        ''' return ML_model instance from saved configuration parameters
+        '''
+        return ML_model(**config)
+    
     def __init__(self,
                  estimator=None,
-                 folder='model',
+                 path='model',
                  seed=0,
                  verbose=1,
                  pos_label=1):
-        '''   
+        ''' if estimator is None, try to read an '.pipe' estimator from path, 
+        and if there's no such '.pipe', use a dummy classifier instead
         '''
-        self.folder = Objs_management(folder)
+        self.path = path
         self.verbose = verbose
         self.pos_label = pos_label
         self.seed = seed
+        self.folder = Objs_management(path)
         self.gridcv_results = None
 
         if estimator is not None:
@@ -126,15 +133,17 @@ class ML_model(BaseEstimator):
             elif hasattr(estimator, '_estimator_type'):
                 self.estimator = estimator
             else:
-                raise ValueError('invalid estimator input')
+                raise ValueError('invalid estimator input type: {}'.format(
+                        estimator.__class__.__name__))
         else:
-            gen, _ = self.folder.read_all(suffix='.estimator')
+            gen, _ = self.folder.read_all(suffix='.pipe')
             if len(gen) > 0:
                 self.estimator = gen[0]
                 print('estimator {} has been read from {}'.format(
                         self.estimator.__class__.__name__, self.folder.path_))
-            else:               
-                raise ValueError('no estimator input')
+            else: 
+                self.estimator = pipe_main('dummy')
+                print('no estimator input, use a dummy classifier ... \n')
 
     def _shut_temp_folder(self):
         '''shut temp folder directory
@@ -184,6 +193,7 @@ class ML_model(BaseEstimator):
                 format(suffix))
         return gen
 
+    
     def plot_auc_test(self,
                       X,
                       y,
@@ -516,7 +526,7 @@ class ML_model(BaseEstimator):
                       cv=3,
                       refit='roc_auc',
                       return_train_score=True,
-                      n_jobs=-1,
+                      n_jobs=3,
                       fit_params={},
                       **kwargs):
         '''tune hyper parameters of estimator by searching param_grid
@@ -606,7 +616,7 @@ class ML_model(BaseEstimator):
 
     def run_train(self,
                   train_set=None,
-                  title=None,
+                  title='Train',
                   scoring=['roc_auc', 'average_precision'],
                   q=None,
                   bins=None,
@@ -670,9 +680,6 @@ class ML_model(BaseEstimator):
     def run_test(self,
                  test_set=None,
                  title=None,
-                 q=None,
-                 bins=None,
-                 max_leaf_nodes=None,
                  use_self_bins=True,
                  cv=3,
                  scoring=['roc_auc', 'average_precision'],
@@ -687,8 +694,6 @@ class ML_model(BaseEstimator):
             2 element tuple (X_test, y_test) or list of them
         title:
             title for test_set indicator
-        q
-            - n equal frequency for lift curve 
         
         return
         ----
@@ -872,8 +877,9 @@ class ML_model(BaseEstimator):
         folder = self.folder
         # save esimator
         folder.write(self.estimator,
-                     _get_estimator_name(self.estimator) + '.estimator')
-        folder.write(self.get_params(), self.__class__.__name__ + 'Param.pkl')
+                     _get_estimator_name(self.estimator) + '.pipe')
+        folder.write(self.get_params(False), 
+                     self.__class__.__name__ + 'Param.pkl')
 
         folder.write(
             self, self.__class__.__name__ + _get_estimator_name(self.estimator)
@@ -919,7 +925,7 @@ class ML_model(BaseEstimator):
 
 
 def _reset_index(*array):
-    '''reset_index df or series, return list of *arrays
+    '''reset_index for df or series, return list of *arrays
     '''
     rst = []
     for i in array:
@@ -932,6 +938,7 @@ def _reset_index(*array):
 
 def _split_cv(*arrays, y=None, groups=None, cv=3, random_state=None):
     '''supervise splitting
+    
     y
         - class label,if None not to stratify
     groups
@@ -1051,7 +1058,7 @@ def _get_estimator_name(estimator):
 
 
 def _get_splits_combined(xy_splits, ret_type='test'):
-    '''return list of combined X y DataFrame for cross validated test set
+    '''return list of combined X&y DataFrame for cross validated test set
     '''
     data_splits_test = [
         pd.concat((pd.DataFrame(i[1]) for i in item), axis=1)
@@ -1074,11 +1081,17 @@ if __name__ == '__main__':
     # Import some data to play with
     X, y = make_classification(1000)
     # test
-    l = ['clean_oht_XGBClassifier']
+    l = [
+         'clean_oht_fxgb_smotelink_XGBClassifier',
+         'clean_oht_fMutualclf_XGBClassifier',
+         'clean_oht_fxgb_XGBClassifier',
+         'clean_oht_fwoe_XGBClassifier'
+         ]
     # 
     for i in l:        
-        model = train_models(i, (X, y), (X, y), max_leaf_nodes=10)
+        model = train_models(i, (X, y), (X, y), max_leaf_nodes=15)
         model.delete_model()
+        
 
 
         
