@@ -17,6 +17,7 @@ from sklearn.preprocessing import (
     OrdinalEncoder, OneHotEncoder, PolynomialFeatures, StandardScaler,
     MinMaxScaler, RobustScaler, Normalizer, QuantileTransformer,
     PowerTransformer, MaxAbsScaler)
+from sklearn.dummy import  DummyClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
@@ -116,8 +117,9 @@ def pipe_main(pipe=None):
     }
     #
     encode = {
-        'oht': Cat_encoder(encode_type='oht', na1=-999),
-        'ordi': Cat_encoder(encode_type='ordi', na1=-999),
+        'oht': Cat_encoder(encode_type='oht', rscale=False, na1=-999),
+        'ohts': Cat_encoder(encode_type='oht', rscale=True, na1=-999),
+        'ordi': Cat_encoder(encode_type='ordi',rscale=True, na1=-999),        
         'woe': Woe_encoder(max_leaf_nodes=5),
     }
 
@@ -220,21 +222,21 @@ def pipe_main(pipe=None):
     # Univariate feature selection
     feature_u = {
         'fchi2':
-        GenericUnivariateSelect(chi2, 'percentile', 20),
+        GenericUnivariateSelect(chi2, 'percentile', 25),
         'fMutualclf':
-        GenericUnivariateSelect(mutual_info_classif, 'percentile', 20),
+        GenericUnivariateSelect(mutual_info_classif, 'percentile', 25),
         'fFclf':
-        GenericUnivariateSelect(f_classif, 'percentile', 20),
+        GenericUnivariateSelect(f_classif, 'percentile', 25),
     }
     # sklearn estimator
     t = all_estimators(type_filter=['classifier'])
     estimator = {i[0]: i[1]() for i in t}
     estimator.update(
+        dummy=DummyClassifier(),
         XGBClassifier=XGBClassifier(n_jobs=-1),
         LogisticRegressionCV=LogisticRegressionCV(scoring='roc_auc'),
-        EasyEnsembleClassifier=EasyEnsembleClassifier(n_jobs=-1),
-        BalancedRandomForestClassifier=BalancedRandomForestClassifier(
-            n_jobs=-1),
+        EasyEnsembleClassifier=EasyEnsembleClassifier(),
+        BalancedRandomForestClassifier=BalancedRandomForestClassifier(),
         RUSBoostClassifier=RUSBoostClassifier(),
         MLPClassifier=MLPClassifier(activation='identity'),
     )
@@ -307,8 +309,7 @@ def _param_grid(estimator):
     XGBClassifier = [
         {
             'learning_rate': np.logspace(-3, 0, 5),
-            'n_estimators': np.linspace(50, 300, 6).astype(int),
-            'n_jobs' : [-1]
+            'n_estimators': np.arange(60, 200, 20).astype(int),
         },
         {
             'max_depth': [2, 3, 4, 5]
@@ -317,8 +318,8 @@ def _param_grid(estimator):
             'gamma': np.logspace(-1, 1, 5)
         },
         {
-            'reg_alpha': np.logspace(0, 1, 5),
-            'reg_lambda': np.logspace(0, 1, 5)
+            'reg_alpha': np.logspace(-1, 2, 5),
+            'reg_lambda': np.logspace(-1, 2, 5)
         },
         {
             'scale_pos_weight': np.logspace(0, 1.5, 5)
@@ -327,6 +328,15 @@ def _param_grid(estimator):
             'colsample_bytree': [1, 0.9, 0.8, 0.75],
             'subsample': [1, 0.9, 0.8, 0.75],
         },
+
+    ]
+
+    AdaBoostClassifier = [
+            {# default base_estimator CART Tree(max_depth=1)
+            'learning_rate' : np.logspace(-3, 0, 5),
+            'n_estimators' : np.logspace(1.5, 2.5, 8).astype(int),
+            },
+
     ]
 
     SVC = [
@@ -338,10 +348,10 @@ def _param_grid(estimator):
             ],
         },
         {
-            'gamma': np.logspace(-5, 1, 8),
+            'gamma': np.logspace(-5, 5, 8),
         },
         {
-            'C': np.logspace(-3, 3, 5)
+            'C': np.logspace(-5, 3, 5)
         }
     ]
 
@@ -351,18 +361,10 @@ def _param_grid(estimator):
             'min_samples_leaf': np.logspace(-3, -1, 5),
         },
         {
-            'n_estimators': np.logspace(1.7, 2.5, 10).astype(int)
+            'n_estimators': np.logspace(1.5, 2.5, 10).astype(int)
         },
     ]
 
-
-    AdaBoostClassifier = [
-            {# default base_estimator CART Tree(max_depth=1)
-            'learning_rate' : np.logspace(-2, 0, 5),
-            'n_estimators' : np.logspace(1.7, 2.5, 8).astype(int),
-            },
-
-    ]
 
     GaussianProcessClassifier = [{
         'kernel': [ConstantKernel() * RBF(),
@@ -1222,7 +1224,7 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
                  encode_type='oht',
                  strategy='constant',
                  na0='null',
-                 na1=-99,
+                 na1=-999,
                  rscale=True,
                  df_out=False):
         '''
