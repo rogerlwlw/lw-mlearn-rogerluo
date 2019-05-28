@@ -80,6 +80,7 @@ class Path(Desc):
             if not os.path.exists(path):
                 os.makedirs(path, exist_ok=True)
                 print("info: path '{}' created...".format(path))
+            
             self._x = os.path.relpath(path)
         except Exception as e:
             print(repr(e))
