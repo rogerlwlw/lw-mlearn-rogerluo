@@ -124,7 +124,6 @@ class ML_model(BaseEstimator):
         self.verbose = verbose
         self.pos_label = pos_label
         self.seed = seed
-        self.folder = Objs_management(path)
         self.gridcv_results = None
 
         if estimator is not None:
@@ -145,6 +144,7 @@ class ML_model(BaseEstimator):
                 self.estimator = pipe_main('dummy')
                 print('no estimator input, use a dummy classifier ... \n')
 
+    
     def _shut_temp_folder(self):
         '''shut temp folder directory
         '''
@@ -192,7 +192,10 @@ class ML_model(BaseEstimator):
                 "file with '{}' suffix not found in 'data' folder... \n".
                 format(suffix))
         return gen
-
+    
+    @property
+    def folder(self):
+        return Objs_management(self.path)
     
     def plot_auc_test(self,
                       X,
@@ -878,6 +881,7 @@ class ML_model(BaseEstimator):
         # save esimator
         folder.write(self.estimator,
                      _get_estimator_name(self.estimator) + '.pipe')
+        
         folder.write(self.get_params(False), 
                      self.__class__.__name__ + 'Param.pkl')
 
@@ -1085,7 +1089,8 @@ if __name__ == '__main__':
          'clean_oht_fxgb_smotelink_XGBClassifier',
          'clean_oht_fMutualclf_XGBClassifier',
          'clean_oht_fxgb_XGBClassifier',
-         'clean_oht_fwoe_XGBClassifier'
+         'clean_oht_fwoe_XGBClassifier',
+         'clean_ordi_fxgb_cleanNN_pca_XGBClassifier',
          ]
     # 
     for i in l:        
