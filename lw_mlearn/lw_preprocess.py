@@ -93,6 +93,7 @@ from lw_mlearn.plotter import plotter_rateVol
 from lw_mlearn.read_write import Path
 
 
+
 def pipe_main(pipe=None):
     '''pipeline construction using sklearn estimators, final step support only
     classifiers currently
@@ -190,8 +191,8 @@ def pipe_main(pipe=None):
     }
     # feature construction
     feature_c = {
-        'pca': PCA(n_components='mle', whiten=True),
-        'spca' : SparsePCA(20, normalize_components=True, n_jobs=-1),
+        'pca': PCA(whiten=True),
+        'spca' : SparsePCA(normalize_components=True, n_jobs=-1),
         'ipca': IncrementalPCA(whiten=True),
         'kpca': KernelPCA(kernel='rbf', n_jobs=-1),
         'poly': PolynomialFeatures(degree=2),
@@ -309,6 +310,8 @@ def _param_grid(estimator):
     XGBClassifier = [
         {
             'learning_rate': np.logspace(-3, 0, 5),
+        },
+        {
             'n_estimators': np.arange(60, 200, 20).astype(int),
         },
         {
