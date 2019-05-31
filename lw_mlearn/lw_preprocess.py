@@ -309,23 +309,21 @@ def _param_grid(estimator):
 
     XGBClassifier = [
         {
-            'learning_rate': np.logspace(-3, 0, 5),
-        },
-        {
-            'n_estimators': np.arange(60, 200, 20).astype(int),
+            'scale_pos_weight': np.logspace(0, 1.5, 5)
         },
         {
             'max_depth': [2, 3, 4, 5]
         },
         {
-            'gamma': np.logspace(-1, 1, 5)
+            'gamma': np.logspace(-2, 1, 5)
         },
         {
-            'reg_alpha': np.logspace(-1, 2, 5),
-            'reg_lambda': np.logspace(-1, 2, 5)
+            'reg_alpha': np.logspace(-2, 2, 5),
+            'reg_lambda': np.logspace(-2, 2, 5)
         },
         {
-            'scale_pos_weight': np.logspace(0, 1.5, 5)
+            'learning_rate': np.logspace(-3, 0, 5),
+            'n_estimators': np.arange(50, 200, 20).astype(int),
         },
         {
             'colsample_bytree': [1, 0.9, 0.8, 0.75],
@@ -721,9 +719,9 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         default 0
     max_leaf_nodes=5
         - max number of bins
-    min_samples_leaf=0.05
+    min_samples_leaf=0.01
         - minimum number of samples in leaf node
-    min_samples_split=0.08
+    min_samples_split=0.01
         - the minimun number of samles required to split a node       
     **tree_params
         - other decision tree keywords
@@ -756,14 +754,14 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
 
     def __init__(self,
                  input_edges={},
-                 cat_num_lim=0,
+                 cat_num_lim=5,
                  q=None,
                  bins=None,
                  max_leaf_nodes=None,
-                 min_samples_leaf=0.05,
-                 min_samples_split=0.1,
+                 min_samples_leaf=0.01,
+                 min_samples_split=0.01,
                  criterion='gini',
-                 min_impurity_decrease=1e-3,
+                 min_impurity_decrease=1e-5,
                  min_impurity_split=None,
                  random_state=0,
                  splitter='best',
@@ -811,6 +809,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         df_binned = self._get_binned(X)
         self.woe_iv, self.woe_map, self.feature_importances_ = calc_woe(
             df_binned, y)
+        print(self.woe_iv)
         return self
 
     def transform(self, X):
@@ -1169,7 +1168,7 @@ def calc_woe(df_binned, y):
         - colname--> iv 
     '''
 
-    print('---' * 20)
+
     l = []
     woe_map = {}
     iv = []
@@ -1183,6 +1182,7 @@ def calc_woe(df_binned, y):
 
     # concatenate col_iv
     woe_iv = pd.concat(l, axis=0, ignore_index=True)
+    print('---' * 20)
     print('total of {} cols get woe & iv'.format(len(l)))
     print('---' * 20, '\n\n')
     return woe_iv, woe_map, pd.Series(iv, var_names)
