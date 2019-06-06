@@ -14,46 +14,26 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import copy
 
 from scipy import interp
 from sklearn.utils import validation, check_consistent_length
-from sklearn.base import clone, BaseEstimator, is_classifier, is_regressor
+from sklearn.base import BaseEstimator
 from sklearn.model_selection import _split
 from sklearn.model_selection import (GridSearchCV, RandomizedSearchCV,
                                      cross_val_score, cross_validate)
 from sklearn.model_selection import _validation
 from sklearn.metrics import roc_curve, auc
 from sklearn.pipeline import Pipeline
-
-from lw_mlearn.utilis import get_flat_list, get_kwargs
-from lw_mlearn.plotter import (plotter_rateVol, plotter_auc,
-                               plotter_cv_results_, plotter_score_path)
-from lw_mlearn.read_write import Objs_management
-from lw_mlearn.lw_preprocess import pipe_main, pipe_grid, _binning
 from functools import wraps
 from shutil import rmtree
 
+from . utilis import get_flat_list, get_kwargs
+from . plotter import ( plotter_auc, plotter_lift_curve,
+                        plotter_cv_results_, plotter_score_path)
+from . read_write import Objs_management
+from . lw_preprocess import pipe_main, pipe_grid, _binning, re_fearturename
 
-def train_models(estimator,
-                 train_set,
-                 test_set,
-                 test_title=None,
-                 max_leaf_nodes=10,
-                 verbose=1,
-                 grid_search=True,
-                 **kwargs):
-    '''run ML_model analysis for given train_set, test_set & estimator
-    
-    parameter
-    ----
-    estimator str:
-        pipe_main() input str in format of 'xx_xx_xx[_xx]', see pipe_main()
-    '''
-    model = ML_model(estimator, estimator, verbose=verbose)
-    model.run_analysis(train_set, test_set, test_title, max_leaf_nodes,
-                       grid_search=grid_search,
-                       **kwargs)
-    return model
 
 
 class ML_model(BaseEstimator):
@@ -187,7 +167,7 @@ class ML_model(BaseEstimator):
         '''return list of obj read from 'data' folder given suffix type
         '''
         gen, _ = self.folder.read_all(suffix, path='data')
-        if len(gen) is 0:
+        if len(gen) == 0:
             raise FileNotFoundError(
                 "file with '{}' suffix not found in 'data' folder... \n".
                 format(suffix))
@@ -319,7 +299,7 @@ class ML_model(BaseEstimator):
 
         estimator = self.estimator
 
-        clf = clone(estimator)
+        clf = copy.deepcopy(estimator)
         tprs = []
         aucs = []
         fpr_ = []
@@ -327,6 +307,8 @@ class ML_model(BaseEstimator):
         mean_fpr = np.linspace(0, 1, 100)
         data_splits = tuple(
             _split_cv(X, y=y, cv=cv, groups=groups, random_state=self.seed))
+        
+
         for x_set, y_set in data_splits:
             clf.fit(x_set[0], y_set[0], **fit_params)
             y_pre = self._pre_continueous(clf, x_set[1])
@@ -339,6 +321,7 @@ class ML_model(BaseEstimator):
             roc_auc = auc(fpr, tpr)
             aucs.append(roc_auc)
 
+
         mean_auc = np.mean(aucs)
         std_auc = np.std(aucs)
         # -- plot
@@ -348,7 +331,7 @@ class ML_model(BaseEstimator):
         ax = plotter_auc(fpr_, tpr_, ax=ax)
 
         header = '-'.join([
-            _get_estimator_name(estimator), 'trainCV', '{} samples'.format(
+            _get_estimator_name(clf), 'trainCV', '{} samples'.format(
                 len(y))
         ])
         if isinstance(title, str):
@@ -529,7 +512,7 @@ class ML_model(BaseEstimator):
                       cv=3,
                       refit='roc_auc',
                       return_train_score=True,
-                      n_jobs=3,
+                      n_jobs=2,
                       fit_params={},
                       **kwargs):
         '''tune hyper parameters of estimator by searching param_grid
@@ -562,7 +545,7 @@ class ML_model(BaseEstimator):
                       refit=None,
                       return_train_score=True,
                       fit_params={},
-                      njobs=-1,
+                      njobs=2,
                       **kwargs):
         '''tune hyper parameters of estimaotr by randomly searching param_grid
         , update self estimator & grid search results     
@@ -719,7 +702,7 @@ class ML_model(BaseEstimator):
         else:
             title_list = [str(i) for i in range(len(test_set_list))]
         check_consistent_length(test_set_list, title_list)
-        if r is 0:
+        if r == 0:
             folder.write([test_set_list, title_list],
                          'data/{}.testdata'.format(len(title_list)))
 
@@ -829,7 +812,7 @@ class ML_model(BaseEstimator):
             self.plot_gridcv(save_fig=save_fig, title=str(i))
             cv_results.append(self.gridcv_results)
 
-        print('sensitivity results & data are being saved... ')
+        print('sensitivity results are being saved... ')
         title = 0 if title is None else str(title)
         folder.write(cv_results,
                      'spreadsheet/GridcvResults{}.xlsx'.format(title))
@@ -845,6 +828,7 @@ class ML_model(BaseEstimator):
                      bins=None,
                      cv=3,
                      grid_search=False,
+                     scoring=['roc_auc', 'average_precision'],
                      **kwargs):
         '''
         - run self.run_sensitivity(if grid_search=True)
@@ -853,7 +837,7 @@ class ML_model(BaseEstimator):
         - store self trainscore & testscore
         '''
         if grid_search is True:
-            self.run_sensitivity(train_set)
+            self.run_sensitivity(train_set, scoring=scoring)
 
         self.trainscore = self.run_train(
             train_set,
@@ -898,34 +882,30 @@ class ML_model(BaseEstimator):
     def feature_names(self):  #need update
         '''get input feature names of final estimator
         '''
-        estimator = self.estimator
+        return re_fearturename(self.estimator)
 
-        if isinstance(estimator, Pipeline):
-            fn = None
-            su = None
-            steps = estimator.steps
-            n = len(steps) - 1
-            while n > -1:
-                n -= 1
-                tr = steps[n][1]
-                if hasattr(tr, 'get_feature_names'):
-                    fn = tr.get_feature_names()
-                    if fn is not None: break
-                if hasattr(tr, 'get_support'):
-                    su = tr.get_support()
-                    
-            if fn is None:
-                print('estimator has no feature_names attribute')
-                return
-            if su is not None:
-                fn = pd.Series(fn)[su]
 
-        return fn
 
-    @feature_names.setter
-    def feature_names(self, value):
-
-        raise ValueError('feature_names cannot be input')
+def train_models(estimator,
+                 train_set,
+                 test_set,
+                 test_title=None,
+                 max_leaf_nodes=10,
+                 verbose=1,
+                 grid_search=True,
+                 **kwargs):
+    '''run ML_model analysis for given train_set, test_set & estimator
+    
+    parameter
+    ----
+    estimator str:
+        pipe_main() input str in format of 'xx_xx_xx[_xx]', see pipe_main()
+    '''
+    model = ML_model(estimator, estimator, verbose=verbose)
+    model.run_analysis(train_set, test_set, test_title, max_leaf_nodes,
+                       grid_search=grid_search,
+                       **kwargs)
+    return model
 
 
 def _reset_index(*array):
@@ -990,72 +970,12 @@ def _split_cv(*arrays, y=None, groups=None, cv=3, random_state=None):
 
     return train_test
 
-
-def plotter_lift_curve(y_pre,
-                       y_true,
-                       bins,
-                       q,
-                       max_leaf_nodes,
-                       labels,
-                       ax,
-                       header,
-                       xlabel='xlabel',
-                       **kwargs):
-    '''return lift curve of y_pre on y_true 
-   
-    y_pre
-        - array_like, value of y to be cut
-    y_true
-        - true value of y for supervised cutting based on decision tree 
-    bins
-        - number of equal width or array of edges
-    q
-        - number of equal frequency              
-    max_leaf_nodes
-        - number of tree nodes using tree cut
-        - if not None use supervised cutting based on decision tree
-    **kwargs - Decision tree keyswords, egg:
-        - min_impurity_decrease=0.001
-        - random_state=0 
-    .. note::
-        -  only 1 of (q, bins, max_leaf_nodes) can be specified       
-    labels
-        - see pd.cut, if False return integer indicator of bins, 
-        - if True return arrays of labels (or can be passed )
-    header
-        - title of plot
-    xlabel
-        - xlabel for xaxis
-    '''
-    y_cut, bins = _binning(
-        y_pre,
-        y_true=y_true,
-        bins=bins,
-        q=q,
-        max_leaf_nodes=max_leaf_nodes,
-        labels=labels,
-        **kwargs)
-    df0 = pd.DataFrame({'y_cut': y_cut, 'y_true': y_true})
-    df_gb = df0.groupby('y_cut')
-    df1 = pd.DataFrame()
-    df1[xlabel] = df_gb.sum().index.values
-    df1['rate'] = (df_gb.sum() / df_gb.count()).values
-    df1['vol'] = df_gb.count().values
-    # plot
-    if ax is None:
-        fig, ax = plt.subplots(1, 1)
-    plotted_data = df1.dropna()
-    ax = plotter_rateVol(plotted_data, ax=ax)
-    plt.title(header, fontsize=14)
-    return ax, y_cut, bins, plotted_data
-
-
 def _get_estimator_name(estimator):
     '''return estimator's class name
     '''
     if isinstance(estimator, Pipeline):
         estimator = estimator._final_estimator
-    if is_classifier(estimator) or is_regressor(estimator):
+    if hasattr(estimator, 'classes_'):
         return getattr(estimator, '__class__').__name__
     else:
         raise TypeError('estimator is not an valid sklearn estimator')
@@ -1080,23 +1000,7 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_train
 
 
-if __name__ == '__main__':
-    from sklearn.datasets import make_classification
-    # Import some data to play with
-    X, y = make_classification(1000)
-    # test
-    l = [
-         'clean_oht_fxgb_smotelink_XGBClassifier',
-         'clean_oht_fMutualclf_XGBClassifier',
-         'clean_oht_fxgb_XGBClassifier',
-         'clean_oht_fwoe_XGBClassifier',
-         'clean_ordi_fxgb_cleanNN_pca_XGBClassifier',
-         ]
-    # 
-    for i in l:        
-        model = train_models(i, (X, y), (X, y), max_leaf_nodes=15)
-        model.delete_model()
-        
+
 
 
         
