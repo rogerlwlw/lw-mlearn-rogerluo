@@ -10,7 +10,8 @@ import pickle
 import shutil
 
 from sklearn.utils import check_consistent_length
-from lw_mlearn.utilis import get_flat_list, get_kwargs
+
+from . utilis import get_flat_list, get_kwargs
 
 
 class _Obj():
