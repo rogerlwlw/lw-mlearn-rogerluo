@@ -11,25 +11,45 @@ Contain functions
 """
 import numpy as np
 import pandas as pd
-
 import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties, FontManager
 import matplotlib.ticker as ticker
-
 from pandas.core.dtypes import api
 from scipy import interp
 from sklearn.metrics import auc, roc_curve
-from lw_mlearn.utilis import get_flat_list, get_kwargs
-#
+
+from . utilis import get_flat_list, get_kwargs
+from . lw_preprocess import _binning
+
 plt.style.use('seaborn')
-plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']  #Chinese font
-plt.rcParams['axes.unicode_minus'] = False
 plt.rcParams.update({
     'figure.dpi': 90.0,
+    'axes.unicode_minus' : False, 
+    'font.family' : ['sans-serif'],
+    'font.sans-serif': [ 
+             'Arial',
+             'Liberation Sans',
+             'DejaVu Sans',
+             'Bitstream Vera Sans',
+             'sans-serif'
+             'Microsoft YaHei',
+             'Microsoft JhengHei',
+             ],       
     'font.size': 10.0,
     'font.style': 'normal',
     'font.weight': 'semibold',
 })
 
+def txt_fontdict(**kwargs):
+    '''
+    '''
+    font = {'family' : 'serif',
+            'color'  : 'black',
+            'weight' : 'normal',
+            'size'   : 12,
+        }
+    font.update(**kwargs)
+    return font
 
 def plotter_auc(fpr,
                 tpr,
@@ -135,13 +155,13 @@ def plotter_auc_y(y_pre, y_true, **kwargs):
     return ax
 
 
-def plotKS(preds, labels, n, asc):
+def plotKS(y_pred, y_true, n, asc):
 
     # preds is score: asc=1
     # preds is prob: asc=0
 
-    pred = preds  # 预测值
-    bad = labels  # 取1为bad, 0为good
+    pred = y_pred  # 预测值
+    bad = y_true # 取1为bad, 0为good
     ksds = pd.DataFrame({'bad': bad, 'pred': pred})
     ksds['good'] = 1 - ksds.bad
 
@@ -233,6 +253,63 @@ def plotKS(preds, labels, n, asc):
 
     return ksds
 
+def plotter_lift_curve(y_pre,
+                       y_true,
+                       bins,
+                       q,
+                       max_leaf_nodes,
+                       labels,
+                       ax,
+                       header,
+                       xlabel='xlabel',
+                       **kwargs):
+    '''return lift curve of y_pre on y_true 
+   
+    y_pre
+        - array_like, value of y to be cut
+    y_true
+        - true value of y for supervised cutting based on decision tree 
+    bins
+        - number of equal width or array of edges
+    q
+        - number of equal frequency              
+    max_leaf_nodes
+        - number of tree nodes using tree cut
+        - if not None use supervised cutting based on decision tree
+    **kwargs - Decision tree keyswords, egg:
+        - min_impurity_decrease=0.001
+        - random_state=0 
+    .. note::
+        -  only 1 of (q, bins, max_leaf_nodes) can be specified       
+    labels
+        - see pd.cut, if False return integer indicator of bins, 
+        - if True return arrays of labels (or can be passed )
+    header
+        - title of plot
+    xlabel
+        - xlabel for xaxis
+    '''
+    y_cut, bins = _binning(
+        y_pre,
+        y_true=y_true,
+        bins=bins,
+        q=q,
+        max_leaf_nodes=max_leaf_nodes,
+        labels=labels,
+        **kwargs)
+    df0 = pd.DataFrame({'y_cut': y_cut, 'y_true': y_true})
+    df_gb = df0.groupby('y_cut')
+    df1 = pd.DataFrame()
+    df1[xlabel] = df_gb.sum().index.values
+    df1['rate'] = (df_gb.sum() / df_gb.count()).values
+    df1['vol'] = df_gb.count().values
+    # plot
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+    plotted_data = df1.dropna()
+    ax = plotter_rateVol(plotted_data, ax=ax)
+    plt.title(header, fontsize=14)
+    return ax, y_cut, bins, plotted_data
 
 def plotter_cv_results_(results,
                         train_style='mo-',
@@ -291,6 +368,7 @@ def plotter_cv_results_(results,
             ['score_max= %0.4f $\pm$ %0.2f' % (np.max(mean), np.mean(std))])
         ax0.axvline(x_max, linestyle='--', marker='x', color='y')
         ax0.annotate("%0.4f" % best_score, (x_max, best_score))
+        ax0.set_xlim(x.min()-0.5, x.max()+0.5)
         plt.setp(ax0, ylabel=s)
 
     # set title
@@ -302,7 +380,7 @@ def plotter_cv_results_(results,
         ncol=3,
         bbox_to_anchor=(0.98, 1))
     ax[-1].set_xlabel(xlabel)
-    plt.tight_layout(rect=(0, 0, 0.98, 0.96))
+    plt.tight_layout(rect=(0, 0, 1, 0.95))
     return ax
 
 
@@ -363,6 +441,7 @@ def plotter_rateVol(df,
         xlabel=labels.name,
         xticklabels=labels,
         ylim=ylim)
+    
     axe.yaxis.set_major_formatter(fmt)
     axe.xaxis.set_label_position(xlabel_position)
     if labels.astype(str).apply(len).max() > 8:
@@ -385,65 +464,6 @@ def plotter_rateVol(df,
     plt.tight_layout(pad=1.08, rect=(0, 0, 1, 0.98))
 
     return out
-
-
-def _axes_attr(ax,
-               ax_params={},
-               xaxis_params={},
-               yaxis_params={},
-               ticks_params={}):
-    ''' to set axes attributes in four containers[axes, xaxis, yaxis, ticks]
-    
-    axe -->
-      - title: str
-      - visible: bool
-      - xbound: (lower: float, upper: float) 
-      - xlabel: str
-      - xlim: (left: float, right: float)
-      - xmargin: float greater than -0.5
-      - xscale: {"linear", "log", "symlog", "logit", ...}
-      - xticklabels: List[str]
-      - xticks: list
-      - ybound: (lower: float, upper: float) 
-      - ylabel: str
-      - ylim: (bottom: float, top: float)
-      - ymargin: float greater than -0.5
-      - yscale: {"linear", "log", "symlog", "logit", ...}
-      - yticklabels: List[str]
-      - yticks: list
-    axis
-      - label_position: {'top', 'bottom'}
-      - major_formatter: ~matplotlib.ticker.Formatter
-      - major_locator: ~matplotlib.ticker.Locator
-      - minor_formatter: ~matplotlib.ticker.Formatter
-      - minor_locator: ~matplotlib.ticker.Locator
-      - path_effects: `.AbstractPathEffect`
-      - ticklabels: sequence of strings or Text objects 
-      - ticks_position: {'top', 'bottom', 'both', 'default', 'none'} 
-    tick_params
-        - axis : {'x', 'y', 'both'}
-            Axis on which to operate; default is 'both'. 
-        - labelrotation : float
-            Tick label rotation
-        - grid_color : color
-            Changes the gridline color to the given mpl color spec.
-        - grid_alpha : float
-            Transparency of gridlines: 0 (transparent) to 1 (opaque).
-        - grid_linewidth : float
-            Width of gridlines in points.
-        - grid_linestyle : string
-            Any valid Line2D line style spec
-    '''
-    # set axe attr
-    if ax_params: plt.setp(ax, **ax_params)
-    # set yaxis attr
-    if xaxis_params: plt.setp(ax.yaxis, **yaxis_params)
-    # set xaxis attr
-    if yaxis_params: plt.setp(ax.xaxis, **xaxis_params)
-    # set ticks attr
-    if ticks_params: ax.tick_params(**ticks_params)
-    return
-
 
 def get_ticks_formatter(name, *args, **kwargs):
     ''' return ticks formattor  
@@ -500,16 +520,6 @@ def plotter_score_path(df_score, title=None, cm=None, style='-.o'):
     plt.tight_layout(rect=(0, 0, 0.98, 0.96))
     return fig
 
-
-def get_font_dict():
-    font = {
-        'family': 'serif',
-        'style': 'normal',
-        'weight': 'semibold',
-        'color': 'k',
-        'size': 11
-    }
-    return font
 
 
 def _annotate(x, y, ax):
@@ -575,11 +585,19 @@ def plotter_contours(ax,
     out = ax.contourf(xx, yy, Z, **params)
     return out
 
-
-if __name__ == '__main__':
-    df = pd.DataFrame({
-        'X': ['A', 'B', 'C', 'D', 'E'],
-        'rate': np.random.rand(5),
-        'vol': np.random.randint(1000, size=5)
-    })
-    plotter_rateVol(df)
+def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf'):
+    '''plot event rate for given woe_iv Dataframe
+    see woe_encoder
+    '''
+    n = 0
+    for keys, gb in woe_iv.groupby('FEATURE_NAME'):
+        plot_data = gb[['CATEGORY', 'EVENT_RATE', 'COUNT']]
+        plot_data.columns = [keys, 'EVENT_RATE', 'COUNT']
+        plotter_rateVol(plot_data.sort_values(keys))
+        if save_path is not None:
+            path = '/'.join([save_path, keys + suffix])
+            plt.savefig(path, dpi=100, frameon=True)
+        n += 1
+        print('(%s)-->\n' % n)
+        yield plt.show()
+        plt.close()
