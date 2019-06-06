@@ -48,6 +48,7 @@ from sklearn.decomposition import (
    TruncatedSVD,
    LatentDirichletAllocation)
 
+from sklearn.metrics import roc_curve, make_scorer
 from sklearn.utils import validation
 from sklearn.utils.testing import all_estimators
 from sklearn.ensemble import RandomTreesEmbedding
@@ -55,7 +56,6 @@ from sklearn.ensemble import IsolationForest, ExtraTreesClassifier
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
-from sklearn.neural_network import MLPClassifier
 
 from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
@@ -85,14 +85,12 @@ from imblearn.ensemble import (
     BalancedRandomForestClassifier,
     RUSBoostClassifier,
 )
+
 from imblearn.combine import SMOTEENN, SMOTETomek
 from imblearn import FunctionSampler
 
-from lw_mlearn.utilis import (dec_iferror_getargs, get_kwargs)
-from lw_mlearn.plotter import plotter_rateVol
-from lw_mlearn.read_write import Path
-
-
+from . utilis import (dec_iferror_getargs, get_kwargs)
+from . read_write import Path
 
 def pipe_main(pipe=None):
     '''pipeline construction using sklearn estimators, final step support only
@@ -216,9 +214,14 @@ def pipe_main(pipe=None):
         SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5)),
         
         'fRFExgb':
-        RFE(XGBClassifier(n_jobs=-1), step=0.1),
+        RFE(XGBClassifier(n_jobs=-1), step=0.1,  n_features_to_select=10),
         'fRFErf':
-        RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5), step=0.1)
+        RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5), step=0.1, 
+            n_features_to_select=10),
+        'fRFElog':
+        RFE(LogisticRegressionCV(penalty='l1', solver='saga', scoring='roc_auc'), 
+            step=0.1, 
+            n_features_to_select=10)
     }
     # Univariate feature selection
     feature_u = {
@@ -231,7 +234,13 @@ def pipe_main(pipe=None):
     }
     # sklearn estimator
     t = all_estimators(type_filter=['classifier'])
-    estimator = {i[0]: i[1]() for i in t}
+    estimator = {}
+    for i in t:
+        try:
+            estimator.update({i[0] : i[1]()})
+        except Exception:
+            continue
+            
     estimator.update(
         dummy=DummyClassifier(),
         XGBClassifier=XGBClassifier(n_jobs=-1),
@@ -239,7 +248,6 @@ def pipe_main(pipe=None):
         EasyEnsembleClassifier=EasyEnsembleClassifier(),
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(),
         RUSBoostClassifier=RUSBoostClassifier(),
-        MLPClassifier=MLPClassifier(activation='identity'),
     )
 
     if pipe is None:
@@ -309,6 +317,10 @@ def _param_grid(estimator):
 
     XGBClassifier = [
         {
+            'learning_rate': np.logspace(-3, 0, 5),
+            'n_estimators': np.arange(50, 200, 20).astype(int),
+        }, 
+        {
             'scale_pos_weight': np.logspace(0, 1.5, 5)
         },
         {
@@ -321,10 +333,7 @@ def _param_grid(estimator):
             'reg_alpha': np.logspace(-2, 2, 5),
             'reg_lambda': np.logspace(-2, 2, 5)
         },
-        {
-            'learning_rate': np.logspace(-3, 0, 5),
-            'n_estimators': np.arange(50, 200, 20).astype(int),
-        },
+
         {
             'colsample_bytree': [1, 0.9, 0.8, 0.75],
             'subsample': [1, 0.9, 0.8, 0.75],
@@ -349,10 +358,10 @@ def _param_grid(estimator):
             ],
         },
         {
-            'gamma': np.logspace(-5, 5, 8),
+            'gamma': np.logspace(-5, 5, 10),
         },
         {
-            'C': np.logspace(-5, 3, 5)
+            'C': np.logspace(-5, 3, 10)
         }
     ]
 
@@ -393,15 +402,7 @@ def _param_grid(estimator):
             'eta0': [0.01]
         },
     ]
-    
-    MLPClassifier = [           
-            {'hidden_layer_sizes' : 
-                [(1000, ), (300, 10), (500, 10), (400, 20), (200, 50)],
-                'alpha' : np.logspace(-3, 3, 10)
-            },
-            
-    
-    ]
+        
     
     LabelPropagation = [
             {'kernel' : ['rbf'], 'gamma' : np.logspace(-5, 1, 5)},
@@ -787,7 +788,20 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
             else:
                 cols.append(col)
         return pd.concat(cols, axis=1)
-
+   
+    @property
+    def feature_importances_(self):
+        '''
+        '''
+        if hasattr(self, 'feature_iv'):
+           
+            print('''IV >0.5 or IV < 0.02 has been forced to 0 due to
+                  meaningless value''')
+            value = self.feature_iv
+            return self.feature_iv.where((0.02<value) & (value<0.5), 0)
+        else:
+            return
+          
     def fit(self, X, y):
         '''fit X(based on CART Tree) to get cutting edges
         (updated by input edges) and  calculate woe & iv for each cat group
@@ -807,7 +821,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         self.edges.update(self.input_edges)
         # --
         df_binned = self._get_binned(X)
-        self.woe_iv, self.woe_map, self.feature_importances_ = calc_woe(
+        self.woe_iv, self.woe_map, self.feature_iv = calc_woe(
             df_binned, y)
         print(self.woe_iv)
         return self
@@ -851,33 +865,6 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         woe_iv, woe_map, iv_series = calc_woe(df_binned, y)
         return woe_iv, woe_map, iv_series.sort_values()
 
-    def plot_EventRate(self, X=None, y=None, save_path=None, suffix='.pdf'):
-        '''plot event rate vs category plus counts/volumes, using self.edges()
-        
-        suffix
-            - most backends support png, pdf, ps, eps and svg.
-        '''
-        if all([X, y]):
-            X = self._filter_labels(X)
-            # --
-            df_binned = self._get_binned(X)
-            woe_iv, woe_map, iv_series = calc_woe(df_binned, y)
-        else:
-            woe_iv = self.woe_iv
-
-        n = 0
-        for keys, gb in woe_iv.groupby('FEATURE_NAME'):
-            plot_data = gb[['CATEGORY', 'EVENT_RATE', 'COUNT']]
-            plot_data.columns = [keys, 'EVENT_RATE', 'COUNT']
-            plotter_rateVol(plot_data.sort_values(keys))
-            if save_path:
-                self.path_ = save_path
-                path = '/'.join([self.path_, keys + suffix])
-                plt.savefig(path, dpi=100, frameon=True)
-            n += 1
-            print('(%s)-->\n' % n)
-            yield plt.show()
-            plt.close()
 
 
 def _tree_univar_bin(arr_x, arr_y, **kwargs):
@@ -1301,3 +1288,36 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X = self._check_categories(X)
         rst = self.encoder.transform(X)
         return rst
+
+
+def ks_score(y_true, y_pred, pos_label=None):
+    '''return K-S score of preditions
+    '''
+    fpr, tpr, _ = roc_curve(y_true, y_pred, pos_label=None)
+    ks = (tpr - fpr).max()   
+    return ks
+
+def re_fearturename(estimator):
+    '''return featurenames of an estimator wrapped in a pipeline
+    '''
+    if isinstance(estimator, Pipeline):
+        fn = None
+        su = None
+        steps = estimator.steps
+        n = len(steps) - 1
+        while n > -1:
+            n -= 1
+            tr = steps[n][1]
+            if hasattr(tr, 'get_feature_names'):
+                fn = tr.get_feature_names()
+                if fn is not None: break
+            if hasattr(tr, 'get_support'):
+                su = tr.get_support()
+                
+        if fn is None:
+            print('estimator has no feature_names attribute')
+            return
+        if su is not None:
+            fn = pd.Series(fn)[su]
+
+    return fn
