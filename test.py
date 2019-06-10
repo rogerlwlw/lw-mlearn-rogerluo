@@ -30,4 +30,4 @@ def test_model():
         model.delete_model()
         
 if __name__ == '__main__':
-    test_model()        
+    test_model()  
