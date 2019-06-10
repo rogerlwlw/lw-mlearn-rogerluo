@@ -12,10 +12,9 @@ import scipy.stats as stats
 from pandas.core.dtypes import api
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import (
     OrdinalEncoder, OneHotEncoder, PolynomialFeatures, StandardScaler,
-    MinMaxScaler, RobustScaler, Normalizer, QuantileTransformer,
+    MinMaxScaler, RobustScaler, Normalizer, QuantileTransformer, LabelEncoder,
     PowerTransformer, MaxAbsScaler)
 from sklearn.dummy import  DummyClassifier
 from sklearn.tree import DecisionTreeClassifier
@@ -48,7 +47,8 @@ from sklearn.decomposition import (
    TruncatedSVD,
    LatentDirichletAllocation)
 
-from sklearn.metrics import roc_curve, make_scorer
+from sklearn.metrics import roc_curve
+from sklearn.impute import SimpleImputer
 from sklearn.utils import validation
 from sklearn.utils.testing import all_estimators
 from sklearn.ensemble import RandomTreesEmbedding
@@ -57,7 +57,6 @@ from sklearn.covariance import EllipticEnvelope
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
 
-from sklearn_pandas import DataFrameMapper
 from xgboost.sklearn import XGBClassifier
 
 from imblearn.pipeline import Pipeline
@@ -112,14 +111,14 @@ def pipe_main(pipe=None):
         2) if pipe is None, a dict indicating possible choice of 'steps'
     '''
     clean = {
-        'clean': Split_cls('not_datetime'),
+        'clean' : Split_cls(dtype_filter='not_datetime', na1='null', na2=-999),
+        'cleanNA' : Split_cls(dtype_filter='not_datetime', na1=None, na2=None)
     }
     #
-    encode = {
-        'oht': Cat_encoder(encode_type='oht', rscale=False, na1=-999),
-        'ohts': Cat_encoder(encode_type='oht', rscale=True, na1=-999),
-        'ordi': Cat_encoder(encode_type='ordi',rscale=True, na1=-999),        
+    encode = {      
         'woe': Woe_encoder(max_leaf_nodes=5),
+        'oht' : Oht_encoder(),
+        'ordi' : Ordi_encoder(),
     }
 
     resample = {
@@ -556,7 +555,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
     '''
     - clean(convert to numeric/str & drop na or uid columns); 
     - filter columns of specific dtypes; 
-    - store input & output columns; drop all na columns 
+    - store input & output columns; drop all na/constant/UID columns 
     
     params
     ---- 
@@ -567,12 +566,16 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         - datetime - filter only datetime dtype
         - not_datetime - exclude only datetime dtype
         - all - all dtypes
-    na
-        - fill na with 'na' value, -999 default
+    na1
+        - fill na strategy for categorical data column , default None
+    na2
+        - fill na stategy for numeric data column, default None
     '''
 
-    def __init__(self, dtype_filter='not_datetime', verbose=0):
-        ''' '''
+    def __init__(self, dtype_filter='not_datetime', verbose=0, 
+                 na1=None, na2=None):
+        ''' 
+        '''
         L = locals().copy()
         L.pop('self')
         self.set_params(**L)
@@ -581,35 +584,65 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         '''fit input_labels & out_labels 
         '''
         X = self._fit(X)
+        
         # drop na columns
         na_col = X.columns[X.apply(lambda x: all(x.isna()))]
         X.dropna(axis=1, how='all', inplace=True)
 
-        # drop uid cols
+        # drop uid cols or too discrete data
         uid_col = []
         for k, col in X.iteritems():
-            if (api.is_object_dtype(col) or api.is_integer_dtype(col)) \
-            and len(pd.unique(col)) > 0.8*len(col):
-                X.drop(k, axis=1, inplace=True)
-                uid_col.append(k)
+            if api.is_object_dtype(col):
+                if len(pd.unique(col)) > 40:
+                    X.drop(k, axis=1, inplace=True)
+                    uid_col.append(k)                    
+            elif api.is_integer_dtype(col):
+                if len(pd.unique(col)) > 0.85*len(col):
+                    X.drop(k, axis=1, inplace=True)
+                    uid_col.append(k)
+        
+        # drop constant
+        const_col = []
+        for k, col in X.iteritems():
+            if (api.is_numeric_dtype(col) and col.std()<0.01) \
+            or len(pd.unique(col))==1:
+                 X.drop(k, axis=1, inplace=True)
+                 const_col.append(k)           
+       
         # filter dtypes
         options = {
-            'not_datetime': X.select_dtypes(exclude='datetime'),
-            'number': X.select_dtypes(include='number'),
-            'object': X.select_dtypes(include='object'),
-            'datetime': X.select_dtypes(include='datetime'),
-            'all': X
+            'not_datetime': X.select_dtypes(exclude='datetime').columns,
+            'number': X.select_dtypes(include='number').columns,
+            'object': X.select_dtypes(include='object').columns,
+            'datetime': X.select_dtypes(include='datetime').columns,
+            'all': X.columns
         }
-        self.out_labels = options.get(self.dtype_filter).columns.tolist()
-
+                
+        self.objcols = options.get('object')
+        self.numcols = options.get('number')
+        self.datetimecols = options.get('datetime')
+        self.obj_na = _get_imputer(self.na1)
+        self.num_na = _get_imputer(self.na2)
+        
+        if self.obj_na is not None and not self.objcols.empty:
+            self.obj_na.fit(X.reindex(columns=self.objcols))
+        if self.num_na is not None and not self.numcols.empty:
+            self.num_na.fit(X.reindex(columns=self.numcols))
+            
+        self.out_labels = options.get(self.dtype_filter).tolist()
         # --
         if len(na_col) > 0:
-            print('{} of columns total {} are null , have been dropped \n'.
+            print('{} ...\n total {} columns are null , have been dropped \n'.
                   format(na_col, len(na_col)))
         if len(uid_col) > 0:
             print(
-                '{} of columns total {} are uid , have been dropped \n'.format(
+                '''{} ...\n total {} columns are uid or has too many discrete 
+                categories , have been dropped \n'''.format(
                     uid_col, len(uid_col)))
+        if len(const_col) > 0:
+            print(
+                ''''{} ...\n total {} columns are constant , have been dropped
+                \n'''.format(const_col, len(const_col)))
 
         if self.verbose > 0:
             for k, i in options.items():
@@ -622,8 +655,26 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         '''transform X to df of specified filter_dtype
         '''
         X = self._filter_labels(X)
-        # --
-        X = X.reindex(columns=self.out_labels)
+        # --        
+        if self.obj_na is not None and not self.objcols.empty:
+            obj = self.obj_na.transform(X.reindex(columns=self.objcols))
+            obj = pd.DataFrame(obj, columns=self.objcols)
+        else:
+            obj = X.reindex(columns=self.objcols)
+            
+        if self.num_na is not None and not self.numcols.empty:
+            num = self.num_na.transform(X.reindex(columns=self.numcols)) 
+            num = pd.DataFrame(num, columns=self.numcols)
+        else:
+            num = X.reindex(columns=self.numcols)
+       
+        cols = set(self.out_labels)
+        othercols = cols.difference(self.objcols.union(self.numcols))            
+        date_col = X.reindex(columns=othercols)
+            
+        X = pd.concat([obj, num, date_col], axis=1)
+        X = X.reindex(columns=self.out_labels)   
+        
         return X
 
 
@@ -1174,12 +1225,9 @@ def calc_woe(df_binned, y):
     print('---' * 20, '\n\n')
     return woe_iv, woe_map, pd.Series(iv, var_names)
 
-
-class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
+class Oht_encoder(BaseEstimator, TransformerMixin, Base_clean):
     ''' 
-    - transform categorical features to ordinal or one-hot encoded; 
-    - other numeric features scaled by Robustscaler(10,90); 
-    - all nan values be encoded 
+    - transform categorical features to  one-hot encoded; 
     
     parameters
     -----
@@ -1188,18 +1236,10 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
           will be treated as zeros, 'raise' error encountered unknow category
     sparse
         - default False, for one-hot encoding, which will return 2D arrays
-    na0 
-        - str value to fill null in input X, default 'null'
-    na1
-        - numeric value to fill null
-    encode_type
-        - 'ordi' ordinal encoding
-        - 'oht' one_hot encoding
+
     strategy 
         - The imputation strategy."mean"/"median"/"most_frequent"/"constant"
-
-    df_out bool default False
-        - whether to output as df       
+  
     attributes
     ----       
     encoder
@@ -1208,15 +1248,9 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         - dict egg. {cloname : array(category names)}, 
     '''
 
-    def __init__(self,
-                 handle_unknown='ignore',
-                 sparse=False,
-                 encode_type='oht',
-                 strategy='constant',
-                 na0='null',
-                 na1=-999,
-                 rscale=True,
-                 df_out=False):
+    def __init__(self,  sparse=False, dtype=np.float64, handle_unknown='ignore', 
+                 n_values=None, categorical_features=None, categories=None,  
+                 drop=None):
         '''
         '''
         L = locals().copy()
@@ -1236,60 +1270,117 @@ class Cat_encoder(BaseEstimator, TransformerMixin, Base_clean):
         if out_c > 0:
             print('''total of {} element out of categories and 
                   will be treated as np.nan '''.format(out_c))
-        if self.encode_type == 'ordi':
-            X = X.where(isin_cat)
         return X
 
     def fit(self, X, y=None):
         '''fit df to get categorical feature using ordinal & one-hot encoder 
         '''
         X = self._fit(X)
-        obj_cols = X.columns[X.dtypes.apply(api.is_object_dtype)].tolist()
-        not_obj = X.columns[~X.dtypes.apply(api.is_object_dtype)].tolist()
-        print('{} of columns {} are object dtype'.format(
-            len(obj_cols), obj_cols))
-        # --
-        if self.encode_type == 'ordi':
-            encoder = OrdinalEncoder()
-
-        if self.encode_type == 'oht':
-            param = get_kwargs(OneHotEncoder, **self.get_params())
-            encoder = OneHotEncoder(**param)
-
-        imput = SimpleImputer(strategy=self.strategy, fill_value=self.na0)
-        imput_n = SimpleImputer(strategy=self.strategy, fill_value=self.na1)
-        features = [([i], [imput, encoder]) for i in obj_cols]
+        self.obj_cols = X.select_dtypes('object').columns
+        self.not_obj = X.columns.difference(self.obj_cols)
         
-        if self.rscale is True:           
-            scale = RobustScaler(quantile_range=(10, 90))
-            not_obj_features = [([i], [scale, imput_n]) for i in not_obj]
-        else:
-            not_obj_features = [([i], [imput_n]) for i in not_obj]
-            
-        features.extend(not_obj_features)
-
-        self.encoder = DataFrameMapper(
-            features, default=False, df_out=self.df_out)
-
-        self.encoder.fit_transform(X, y=None)
-
-        self.encode_mapper = {
-            i[0][0]: np.ravel(i[1][1].categories_)
-            for i in self.encoder.features if i[0][0] in obj_cols
-        }
-        self.out_labels = self.encoder.transformed_names_
+        self.encoder = OneHotEncoder(**self.get_params())
+        self.encoder.fit(X.reindex(columns=self.obj_cols)) 
+        self.encoder_fnames = self.encoder.get_feature_names(self.obj_cols)
+        self.encode_mapper = dict(zip(self.obj_cols, self.encoder.categories_))      
+        self.out_labels = self.encoder_fnames.tolist() + self.not_obj.tolist()
+                                              
         return self
 
     def transform(self, X):
-        '''transform df to encoded X        
+        '''transform categorical columns in X  to dummy variable , other columns 
+        remain unchaged
         '''
         X = self._filter_labels(X)
-        # --
-        X = self._check_categories(X)
-        rst = self.encoder.transform(X)
+        # --obj cols
+        X0 = X.reindex(columns=self.obj_cols)
+        X0 = self._check_categories(X0)
+        X0 = self.encoder.transform(X0)
+        X0 = pd.DataFrame(X0, columns=self.encoder_fnames)
+        # --not obj do nothing
+        X1 = X.reindex(columns=self.not_obj)
+        rst = pd.concat([X0, X1], axis=1)
+        rst = rst.reindex(columns=self.out_labels)
         return rst
 
+class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
+    ''' 
+    - transform categorical features to ordinal encoded; 
+    
+    parameters
+    -----
+    handle_unknown 
+        - default 'ignore', for one-hot encoding, unknown feature category
+          will be treated as zeros, 'raise' error encountered unknow category
+    sparse
+        - default False, for one-hot encoding, which will return 2D arrays
 
+    strategy 
+        - The imputation strategy."mean"/"median"/"most_frequent"/"constant"
+  
+    attributes
+    ----       
+    encoder
+        - sklearn transformer instance
+    encode_mapper - categories mapper of each column
+        - dict egg. {cloname : array(category names)}, 
+    '''
+
+    def __init__(self, categories='auto', dtype=np.float64):
+        '''
+        '''
+        L = locals().copy()
+        L.pop('self')
+        self.set_params(**L)
+
+    def _check_categories(self, X):
+        '''check if feature category are out of categories scope, treat them as 
+        null
+        '''
+        if len(self.encode_mapper) == 0: return X
+        #
+        mapper = self.encode_mapper
+        isin_cat = X.apply(
+            lambda x: x.isin(mapper.get(x.name, x)) | x.isna(), axis=0)
+        out_c = np.ravel(~isin_cat).sum()
+        if out_c > 0:
+            print('''total of {} element out of categories and 
+                  will be treated as np.nan '''.format(out_c))
+        X = X.where(isin_cat)
+        return X
+
+    def fit(self, X, y=None):
+        '''fit df to get categorical feature using ordinal & one-hot encoder 
+        '''
+        X = self._fit(X)
+        self.obj_cols = X.select_dtypes('object').columns
+        self.not_obj = X.columns.difference(self.obj_cols)
+        
+        self.encoder = OrdinalEncoder(**self.get_params())
+        self.encoder.fit(X.reindex(columns=self.obj_cols)) 
+        self.encoder_fnames = self.obj_cols
+        self.encode_mapper = dict(zip(self.obj_cols, self.encoder.categories_))      
+        self.out_labels = self.encoder_fnames.tolist() + self.not_obj.tolist()
+                                              
+        return self
+
+    def transform(self, X):
+        '''transform categorical columns in X  to dummy variable , other columns 
+        remain unchaged
+        '''
+        X = self._filter_labels(X)
+        # --obj cols
+        X0 = X.reindex(columns=self.obj_cols)
+        X0 = self._check_categories(X0)
+        X0 = self.encoder.transform(X0)
+        X0 = pd.DataFrame(X0, columns=self.encoder_fnames)
+        # --not obj do nothing
+        X1 = X.reindex(columns=self.not_obj)
+        rst = pd.concat([X0, X1], axis=1)
+        rst = rst.reindex(columns=self.out_labels)
+        return rst    
+    
+    
 def ks_score(y_true, y_pred, pos_label=None):
     '''return K-S score of preditions
     '''
@@ -1321,3 +1412,23 @@ def re_fearturename(estimator):
             fn = pd.Series(fn)[su]
 
     return fn
+
+
+def _get_imputer(imput):
+    '''
+    '''
+    if api.is_number(imput):
+        imputer = SimpleImputer(strategy='constant', fill_value=imput)
+    elif imput == 'mean':
+        imputer = SimpleImputer(strategy='mean')
+    elif imput == 'most_frequent' :
+        imputer = SimpleImputer(strategy='most_frequent')
+    elif isinstance(imput, str):
+        imputer = SimpleImputer(strategy='constant', fill_value=imput)
+    else:
+        return
+        
+    return imputer
+        
+    
+    
