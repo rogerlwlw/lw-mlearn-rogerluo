@@ -6,7 +6,6 @@ Created on Tue Dec 18 14:36:20 2018
 """
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.stats as stats
 
 from pandas.core.dtypes import api
@@ -14,11 +13,13 @@ from pandas.core.dtypes import api
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import (
     OrdinalEncoder, OneHotEncoder, PolynomialFeatures, StandardScaler,
-    MinMaxScaler, RobustScaler, Normalizer, QuantileTransformer, LabelEncoder,
+    MinMaxScaler, RobustScaler, Normalizer, QuantileTransformer,
     PowerTransformer, MaxAbsScaler)
 from sklearn.dummy import  DummyClassifier
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.svm import LinearSVC
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.svm import LinearSVC, SVC
 from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
 from sklearn.feature_selection import (SelectFromModel,
                                        GenericUnivariateSelect, chi2,
@@ -90,6 +91,7 @@ from imblearn import FunctionSampler
 
 from . utilis import (dec_iferror_getargs, get_kwargs)
 from . read_write import Path
+from . plotter import plt, plotter_rateVol
 
 def pipe_main(pipe=None):
     '''pipeline construction using sklearn estimators, final step support only
@@ -193,7 +195,9 @@ def pipe_main(pipe=None):
         'ipca': IncrementalPCA(whiten=True),
         'kpca': KernelPCA(kernel='rbf', n_jobs=-1),
         'poly': PolynomialFeatures(degree=2),
-        'rtembedding': RandomTreesEmbedding(n_estimators=10)
+        'rtembedding': RandomTreesEmbedding(n_estimators=10),
+        'LDA' : LinearDiscriminantAnalysis(),
+        'QDA' : QuadraticDiscriminantAnalysis(),   
     }
     # select from model
     feature_m = {
@@ -216,11 +220,11 @@ def pipe_main(pipe=None):
         RFE(XGBClassifier(n_jobs=-1), step=0.1,  n_features_to_select=10),
         'fRFErf':
         RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5), step=0.1, 
-            n_features_to_select=10),
+            n_features_to_select=15),
         'fRFElog':
         RFE(LogisticRegressionCV(penalty='l1', solver='saga', scoring='roc_auc'), 
             step=0.1, 
-            n_features_to_select=10)
+            n_features_to_select=15)
     }
     # Univariate feature selection
     feature_u = {
@@ -247,6 +251,7 @@ def pipe_main(pipe=None):
         EasyEnsembleClassifier=EasyEnsembleClassifier(),
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(),
         RUSBoostClassifier=RUSBoostClassifier(),
+        SVC = SVC(C=0.01, gamma='auto')
     )
 
     if pipe is None:
@@ -341,45 +346,52 @@ def _param_grid(estimator):
     ]
 
     AdaBoostClassifier = [
-            {# default base_estimator CART Tree(max_depth=1)
-            'learning_rate' : np.logspace(-3, 0, 5),
-            'n_estimators' : np.logspace(1.5, 2.5, 8).astype(int),
+            {
+            'learning_rate' : np.logspace(-3, 0, 5),            
+            },
+            {
+            'n_estimators' : np.logspace(1.5, 2.5, 5).astype(int),
             },
 
     ]
 
     SVC = [
         {
-            'kernel': [
-                'rbf',
-                'sigmoid',
-                'linear',
-            ],
+            'kernel': ['rbf', 'sigmoid', 'ploy'],
         },
         {
-            'gamma': np.logspace(-5, 5, 10),
+            'gamma': np.logspace(-5, 5, 5),
         },
         {
-            'C': np.logspace(-5, 3, 10)
+            'C': np.logspace(-5, 1, 5)
         }
     ]
 
     RandomForestClassifier = [
         {
             'max_depth': range(3, 10),
-            'min_samples_leaf': np.logspace(-3, -1, 5),
+            'min_samples_leaf': np.logspace(-5, -1, 5),
         },
         {
             'n_estimators': np.logspace(1.5, 2.5, 10).astype(int)
         },
     ]
-
+    
+    GradientBoostingClassifier = [
+        {
+            'max_depth': range(2, 5),
+            'min_samples_leaf': np.logspace(-5, -1, 5),
+        },
+        {
+            'n_estimators': np.logspace(1.5, 2.5, 10).astype(int)
+        },
+        {'subsample' : [1, 0.9, 0.8, 0.75]}
+    ]
 
     GaussianProcessClassifier = [{
-        'kernel': [ConstantKernel() * RBF(),
+        'kernel': [ConstantKernel()*RBF(),
                    RationalQuadratic(),
                    Matern()],
-        'n_jobs' : [-1]
     }]
 
     DecisionTreeClassifier = [{
@@ -426,7 +438,7 @@ def _param_grid(estimator):
         'RUSBoostClassifier':
         param_grids.get('AdaBoostClassifier'),
         'BalancedRandomForestClassifier':
-        param_grids.get('RandomForestClassifier')
+        param_grids.get('RandomForestClassifier'),
     })
 
     grid = param_grids.get(estimator)
@@ -435,7 +447,9 @@ def _param_grid(estimator):
         print("key '{}' not found, param_grid not returned".format(
                 estimator))
     else:
-        print("param_grid for '{}' returned as : \n {}".format(estimator, grid))
+        print("param_grid for '{}' returned as : \n".format(estimator))
+        [print(i) for i in grid]
+        
     return grid
 
 
@@ -449,7 +463,7 @@ def outlier_rejection(X=None,
         IsolationForest(contamination=contamination),
         LocalOutlierFactor(contamination=contamination),
         OneClassSVM(nu=contamination),
-        EllipticEnvelope(contamination=contamination),
+        EllipticEnvelope(contamination=contamination),       
     )
 
     outlier_model = {i.__class__.__name__: i for i in outlier_model}
@@ -637,7 +651,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         if len(uid_col) > 0:
             print(
                 '''{} ...\n total {} columns are uid or has too many discrete 
-                categories , have been dropped \n'''.format(
+                categories (>40) , have been dropped \n'''.format(
                     uid_col, len(uid_col)))
         if len(const_col) > 0:
             print(
@@ -849,7 +863,8 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
             print('''IV >0.5 or IV < 0.02 has been forced to 0 due to
                   meaningless value''')
             value = self.feature_iv
-            return self.feature_iv.where((0.02<value) & (value<0.5), 0)
+            iv = self.feature_iv.where((0.02<value) & (value<0.5))
+            return iv.dropna()
         else:
             return
           
@@ -907,14 +922,11 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
             print("{} have not been woe encoded".format(cols_notcoded))
         return pd.concat(cols, axis=1)
 
-    def score(self, X, y):
+    def plot_event_rate(self, save_path=None, suffix='.pdf',dw=0.019, up=0.5):
         '''return iv of each column using self.edges
         '''
-        X = self._filter_labels(X)
-        # --
-        df_binned = self._get_binned(X)
-        woe_iv, woe_map, iv_series = calc_woe(df_binned, y)
-        return woe_iv, woe_map, iv_series.sort_values()
+        plotter_woeiv_event(self.woe_iv, save_path, suffix, dw, up)
+
 
 
 
@@ -1225,6 +1237,7 @@ def calc_woe(df_binned, y):
     print('---' * 20, '\n\n')
     return woe_iv, woe_map, pd.Series(iv, var_names)
 
+
 class Oht_encoder(BaseEstimator, TransformerMixin, Base_clean):
     ''' 
     - transform categorical features to  one-hot encoded; 
@@ -1429,6 +1442,81 @@ def _get_imputer(imput):
         return
         
     return imputer
+
+def plotter_lift_curve(y_pre,
+                       y_true,
+                       bins,
+                       q,
+                       max_leaf_nodes,
+                       labels,
+                       ax,
+                       header,
+                       xlabel='xlabel',
+                       **kwargs):
+    '''return lift curve of y_pre on y_true 
+   
+    y_pre
+        - array_like, value of y to be cut
+    y_true
+        - true value of y for supervised cutting based on decision tree 
+    bins
+        - number of equal width or array of edges
+    q
+        - number of equal frequency              
+    max_leaf_nodes
+        - number of tree nodes using tree cut
+        - if not None use supervised cutting based on decision tree
+    **kwargs - Decision tree keyswords, egg:
+        - min_impurity_decrease=0.001
+        - random_state=0 
+    .. note::
+        -  only 1 of (q, bins, max_leaf_nodes) can be specified       
+    labels
+        - see pd.cut, if False return integer indicator of bins, 
+        - if True return arrays of labels (or can be passed )
+    header
+        - title of plot
+    xlabel
+        - xlabel for xaxis
+    '''
+    y_cut, bins = _binning(
+        y_pre,
+        y_true=y_true,
+        bins=bins,
+        q=q,
+        max_leaf_nodes=max_leaf_nodes,
+        labels=labels,
+        **kwargs)
+    df0 = pd.DataFrame({'y_cut': y_cut, 'y_true': y_true})
+    df_gb = df0.groupby('y_cut')
+    df1 = pd.DataFrame()
+    df1[xlabel] = df_gb.sum().index.values
+    df1['rate'] = (df_gb.sum() / df_gb.count()).values
+    df1['vol'] = df_gb.count().values
+    # plot
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+    plotted_data = df1.dropna()
+    ax = plotter_rateVol(plotted_data, ax=ax)
+    plt.title(header, fontsize=14)
+    return ax, y_cut, bins, plotted_data      
+    
+def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.019, up=0.5):
+    '''plot event rate for given woe_iv Dataframe
+    see woe_encoder
+    '''
+    n = 0
+    for keys, gb in woe_iv.groupby('FEATURE_NAME'):
+        if (gb['IV'].sum() > dw) and (gb['IV'].sum() < up):
+            plot_data = gb[['CATEGORY', 'EVENT_RATE', 'COUNT']]
+            plot_data.columns = [keys, 'EVENT_RATE', 'COUNT']
+            plotter_rateVol(plot_data.sort_values(keys))
+            if save_path is not None:
+                path = '/'.join([save_path, keys + suffix])
+                plt.savefig(path, dpi=100, frameon=True)
+            n += 1
+            print('(%s)-->\n' % n)
+            plt.show()
+            plt.close()
         
-    
-    
+    return   
