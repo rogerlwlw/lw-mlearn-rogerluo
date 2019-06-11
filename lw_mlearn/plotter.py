@@ -12,14 +12,13 @@ Contain functions
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.font_manager import FontProperties, FontManager
+
 import matplotlib.ticker as ticker
 from pandas.core.dtypes import api
 from scipy import interp
 from sklearn.metrics import auc, roc_curve
 
 from . utilis import get_flat_list, get_kwargs
-from . lw_preprocess import _binning
 
 plt.style.use('seaborn')
 plt.rcParams.update({
@@ -49,6 +48,7 @@ def txt_fontdict(**kwargs):
             'size'   : 12,
         }
     font.update(**kwargs)
+    print(font)
     return font
 
 def plotter_auc(fpr,
@@ -253,63 +253,7 @@ def plotKS(y_pred, y_true, n, asc):
 
     return ksds
 
-def plotter_lift_curve(y_pre,
-                       y_true,
-                       bins,
-                       q,
-                       max_leaf_nodes,
-                       labels,
-                       ax,
-                       header,
-                       xlabel='xlabel',
-                       **kwargs):
-    '''return lift curve of y_pre on y_true 
-   
-    y_pre
-        - array_like, value of y to be cut
-    y_true
-        - true value of y for supervised cutting based on decision tree 
-    bins
-        - number of equal width or array of edges
-    q
-        - number of equal frequency              
-    max_leaf_nodes
-        - number of tree nodes using tree cut
-        - if not None use supervised cutting based on decision tree
-    **kwargs - Decision tree keyswords, egg:
-        - min_impurity_decrease=0.001
-        - random_state=0 
-    .. note::
-        -  only 1 of (q, bins, max_leaf_nodes) can be specified       
-    labels
-        - see pd.cut, if False return integer indicator of bins, 
-        - if True return arrays of labels (or can be passed )
-    header
-        - title of plot
-    xlabel
-        - xlabel for xaxis
-    '''
-    y_cut, bins = _binning(
-        y_pre,
-        y_true=y_true,
-        bins=bins,
-        q=q,
-        max_leaf_nodes=max_leaf_nodes,
-        labels=labels,
-        **kwargs)
-    df0 = pd.DataFrame({'y_cut': y_cut, 'y_true': y_true})
-    df_gb = df0.groupby('y_cut')
-    df1 = pd.DataFrame()
-    df1[xlabel] = df_gb.sum().index.values
-    df1['rate'] = (df_gb.sum() / df_gb.count()).values
-    df1['vol'] = df_gb.count().values
-    # plot
-    if ax is None:
-        fig, ax = plt.subplots(1, 1)
-    plotted_data = df1.dropna()
-    ax = plotter_rateVol(plotted_data, ax=ax)
-    plt.title(header, fontsize=14)
-    return ax, y_cut, bins, plotted_data
+
 
 def plotter_cv_results_(results,
                         train_style='mo-',
@@ -585,19 +529,3 @@ def plotter_contours(ax,
     out = ax.contourf(xx, yy, Z, **params)
     return out
 
-def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf'):
-    '''plot event rate for given woe_iv Dataframe
-    see woe_encoder
-    '''
-    n = 0
-    for keys, gb in woe_iv.groupby('FEATURE_NAME'):
-        plot_data = gb[['CATEGORY', 'EVENT_RATE', 'COUNT']]
-        plot_data.columns = [keys, 'EVENT_RATE', 'COUNT']
-        plotter_rateVol(plot_data.sort_values(keys))
-        if save_path is not None:
-            path = '/'.join([save_path, keys + suffix])
-            plt.savefig(path, dpi=100, frameon=True)
-        n += 1
-        print('(%s)-->\n' % n)
-        yield plt.show()
-        plt.close()
