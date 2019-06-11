@@ -29,10 +29,10 @@ from functools import wraps
 from shutil import rmtree
 
 from . utilis import get_flat_list, get_kwargs
-from . plotter import ( plotter_auc, plotter_lift_curve,
-                        plotter_cv_results_, plotter_score_path)
+from . plotter import ( plotter_auc, plotter_cv_results_, plotter_score_path)
 from . read_write import Objs_management
-from . lw_preprocess import pipe_main, pipe_grid, _binning, re_fearturename
+from . lw_preprocess import (pipe_main, pipe_grid, _binning, re_fearturename,
+                             plotter_lift_curve)
 
 
 
@@ -512,7 +512,7 @@ class ML_model(BaseEstimator):
                       cv=3,
                       refit='roc_auc',
                       return_train_score=True,
-                      n_jobs=2,
+                      n_jobs=1,
                       fit_params={},
                       **kwargs):
         '''tune hyper parameters of estimator by searching param_grid
@@ -755,7 +755,7 @@ class ML_model(BaseEstimator):
                         refit='roc_auc',
                         scoring=['roc_auc', 'average_precision'],
                         fit_params={},
-                        n_jobs=2,
+                        n_jobs=1,
                         save_fig=True,
                         **kwargs):
         '''
@@ -805,7 +805,7 @@ class ML_model(BaseEstimator):
         for i, grid in enumerate(get_flat_list(param_grid)):
             self.grid_searchcv(
                 X,
-                y,
+                y=y,
                 param_grid=grid,
                 **get_kwargs(self.grid_searchcv, **L),
                 **kwargs)
@@ -845,7 +845,7 @@ class ML_model(BaseEstimator):
             q=q,
             bins=bins,
             max_leaf_nodes=max_leaf_nodes)
-        print(self.trainscore, '\n')
+        print('cv score = \n', self.trainscore, '\n')
 
         try:
            self.testscore = self.run_test(
