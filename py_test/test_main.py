@@ -25,7 +25,7 @@ def _model_run(data, pipe):
     X, y = data
     E = ML_model(pipe, path=pipe)
 
-    E.run_analysis((X, y), (X,y), max_leaf_nodes=3)
+    E.run_analysis((X, y), (X,y), max_leaf_nodes=5)
     
     E.delete_model()
     
