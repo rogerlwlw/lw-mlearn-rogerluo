@@ -4,12 +4,9 @@ Created on Mon Jun  3 14:10:59 2019
 
 @author: rogerluo
 """
-from lw_mlearn.lw_model import train_models, model_experiment
-from lw_mlearn import pipe_main, ML_model
+from lw_mlearn.lw_model import train_models
 from sklearn.datasets import make_classification
-from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic,
-                                              ExpSineSquared, DotProduct,
-                                              Exponentiation, ConstantKernel)
+
 
 def test_model():
     '''with small fake data to walk through workflow
