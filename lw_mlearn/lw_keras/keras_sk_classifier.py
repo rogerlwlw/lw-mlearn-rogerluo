@@ -10,6 +10,8 @@ from keras.wrappers.scikit_learn import KerasClassifier
 from . mlp import  bfn_dense
 
 class KerasClassifier_(KerasClassifier):
+    '''wrap keras model as scikit estimators
+    '''
 
     @wraps(KerasClassifier.fit)
     def fit(self, X, y=None, sample_weight=None, **kwargs):
