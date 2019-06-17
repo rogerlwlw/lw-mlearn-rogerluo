@@ -25,15 +25,24 @@ of:
 8) performance evaluation (plot multi_metrics/scores)
 9) production integration
 
-two main hepler functions:
+For deep learning:
+    - pkg lw_keras based on Keras framework is included
+
+Main hepler functions:
 
 1) pipe_main:
-    return pipeline instance combining transformers and estimators(including some 
-    pre-difined custom estimators)
-2) LW_model:
-     return wrapper of pipeline, which contains methods performming 
-     model training, performance scoring, plotting, hyper tunning, 
-     cross validation and model serialization
+    return pipeline instance, a chained sequence of transformers and estimators(
+    including some pre-difined custom estimators)
+
+2) train_models:
+    run ML_model analysis for given train_set, test_set & estimator and dump results
+3) model_experiments:
+    experiment on different piplines of chained estimators
+
+4) LW_model (Class):
+     return a wrapper of pipeline, which implements methods for performance scoring, 
+     plotting, hyper parameter tunning, cross validation and model serialization
+
 
 Contact
 =============
