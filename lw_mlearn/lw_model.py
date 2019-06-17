@@ -907,7 +907,7 @@ def train_models(estimator,
                        **kwargs)
     return model
 
-def model_experiment(X=None, y=None, cv=3, scoring='roc_auc'):
+def model_experiments(X=None, y=None, cv=3, scoring='roc_auc'):
     ''' experiment on different piplines of chained estimators
     '''
     l = [
