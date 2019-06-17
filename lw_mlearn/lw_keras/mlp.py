@@ -29,7 +29,7 @@ def bfn_dense( dense_layer=(1,),
                penalty='l1',
                dropout_ratio=0.2,
                **kwargs):
-    '''build function to return densely connected net
+    '''build function to return densely connected network
     
     parameters
     ----
