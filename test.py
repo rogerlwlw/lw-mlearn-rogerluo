@@ -17,15 +17,14 @@ def test_model():
     X, y = make_classification(300, n_redundant=5, n_features=30)
     l = [
          'clean_LDA_fxgb_cleanNN_AdaBoostClassifier',
-#         'clean_oht_fRFElog_cleanNN_GaussianProcessClassifier',  
-#         
-#         'clean_oht_fxgb_cleanNN_XGBClassifier',
-#         'clean_oht_fxgb_cleanNN_RandomForestClassifier',
-#         'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
-#         'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
-#         'clean_oht_fxgb_cleanNN_BalancedRandomForestClassifier',
-#         'clean_oht_fxgb_cleanNN_RUSBoostClassifier',        
-#         'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier',
+         'clean_oht_fRFElog_cleanNN_GaussianProcessClassifier',          
+         'clean_oht_fxgb_cleanNN_XGBClassifier',
+         'clean_oht_fxgb_cleanNN_RandomForestClassifier',
+         'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
+         'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
+         'clean_oht_fxgb_cleanNN_BalancedRandomForestClassifier',
+         'clean_oht_fxgb_cleanNN_RUSBoostClassifier',        
+         'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier',
          ]
     # --
     for i in l:        
