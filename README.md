@@ -7,6 +7,7 @@ of:
     - try converting data to numeric dtype; 
     - dropna columns; 
     - drop uid columns;
+    - drop constant columns;
     - filter specific dtypes;
 2) data encoding: 
     - oridinal/one-hot encoding; 
@@ -15,13 +16,13 @@ of:
 3) feature selection:
     - select from model(svc, xgb, cart, random forest); 
     - select from test statisics (chi2, mutual-info, woe);
-    - pca decomposition
+    - pca/LDA/QDA decomposition
     - RFE
-4) over/under resampling
+4) resampling (over/under )
 5) model training;
 6) cross validation, 
 7) hyper parameter tuning(grid_search), 
-8) performance evaluation (multi_metrics)
+8) performance evaluation (plot multi_metrics/scores)
 9) production integration
 
 two main hepler functions:
