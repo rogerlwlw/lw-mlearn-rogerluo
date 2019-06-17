@@ -217,7 +217,7 @@ def pipe_main(pipe=None):
         SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5)),
         
         'fRFExgb':
-        RFE(XGBClassifier(n_jobs=-1), step=0.1,  n_features_to_select=10),
+        RFE(XGBClassifier(n_jobs=-1), step=0.1,  n_features_to_select=15),
         'fRFErf':
         RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5), step=0.1, 
             n_features_to_select=15),
@@ -357,7 +357,7 @@ def _param_grid(estimator):
 
     SVC = [
         {
-            'kernel': ['rbf', 'sigmoid', 'ploy'],
+            'kernel': ['rbf', 'sigmoid', 'poly'],
         },
         {
             'gamma': np.logspace(-5, 5, 5),
