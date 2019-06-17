@@ -202,7 +202,7 @@ def pipe_main(pipe=None):
     # select from model
     feature_m = {
         'fwoe':
-        SelectFromModel(Woe_encoder(max_leaf_nodes=5), threshold=0.02),
+        SelectFromModel(Woe_encoder(max_leaf_nodes=5)),
         'flog':
         SelectFromModel(
             LogisticRegressionCV(
@@ -864,7 +864,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
                   meaningless value''')
             value = self.feature_iv
             iv = self.feature_iv.where((0.02<value) & (value<0.5))
-            return iv.dropna()
+            return iv
         else:
             return
           
@@ -922,7 +922,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
             print("{} have not been woe encoded".format(cols_notcoded))
         return pd.concat(cols, axis=1)
 
-    def plot_event_rate(self, save_path=None, suffix='.pdf',dw=0.019, up=0.5):
+    def plot_event_rate(self, save_path=None, suffix='.pdf',dw=0.02, up=0.5):
         '''return iv of each column using self.edges
         '''
         plotter_woeiv_event(self.woe_iv, save_path, suffix, dw, up)
@@ -1501,7 +1501,7 @@ def plotter_lift_curve(y_pre,
     plt.title(header, fontsize=14)
     return ax, y_cut, bins, plotted_data      
     
-def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.019, up=0.5):
+def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02, up=0.5):
     '''plot event rate for given woe_iv Dataframe
     see woe_encoder
     '''
