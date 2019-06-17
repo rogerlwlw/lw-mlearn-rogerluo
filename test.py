@@ -4,7 +4,7 @@ Created on Mon Jun  3 14:10:59 2019
 
 @author: rogerluo
 """
-from lw_mlearn.lw_model import train_models
+from lw_mlearn.lw_model import train_models, model_experiment
 from lw_mlearn import pipe_main, ML_model
 from sklearn.datasets import make_classification
 from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic,
@@ -16,15 +16,26 @@ def test_model():
     '''
     X, y = make_classification(300, n_redundant=5, n_features=30)
     l = [
-         'clean_LDA_fxgb_cleanNN_AdaBoostClassifier',
-         'clean_oht_fRFElog_cleanNN_GaussianProcessClassifier',          
+         'clean_oht_LDA_fxgb_cleanNN_AdaBoostClassifier',
+         'clean_oht_fxgb_RUSBoostClassifier', 
+         
+         'clean_oht_LDA_cleanNN_stdscale_GaussianProcessClassifier',          
+         'clean_oht_fRFErf_cleanNN_stdscale_GaussianProcessClassifier',
+         'clean_oht_fRFErf_cleanNN_stdscale_SVC',         
+         'clean_oht_LDA_cleanNN_stdscale_SVC',         
+           
          'clean_oht_fxgb_cleanNN_XGBClassifier',
+         'clean_oht_fxgb_oside_XGBClassifier',
+         'clean_oht_frf_oside_XGBClassifier',
+         
          'clean_oht_fxgb_cleanNN_RandomForestClassifier',
+         'clean_oht_frf_RandomForestClassifier',
+         'clean_oht_fxgb_BalancedRandomForestClassifier',   
+         
          'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
-         'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
-         'clean_oht_fxgb_cleanNN_BalancedRandomForestClassifier',
-         'clean_oht_fxgb_cleanNN_RUSBoostClassifier',        
-         'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier',
+         'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier', 
+         
+         'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',            
          ]
     # --
     for i in l:        
