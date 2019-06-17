@@ -26,10 +26,11 @@ of:
 9) production integration
 
 For deep learning:
+=============
     - pkg lw_keras based on Keras framework is included
 
 Main hepler functions:
-
+=============
 1) pipe_main:
     return pipeline instance, a chained sequence of transformers and estimators(
     including some pre-difined custom estimators)
