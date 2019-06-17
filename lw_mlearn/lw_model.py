@@ -907,6 +907,40 @@ def train_models(estimator,
                        **kwargs)
     return model
 
+def model_experiment(X=None, y=None, cv=3, scoring='roc_auc'):
+    ''' experiment on different piplines of chained estimators
+    '''
+    l = [
+         'clean_oht_LDA_fxgb_cleanNN_AdaBoostClassifier',
+         'clean_oht_fxgb_RUSBoostClassifier', 
+         
+         'clean_oht_fRFElog_cleanNN_stdscale_GaussianProcessClassifier',          
+         'clean_oht_fRFErf_cleanNN_stdscale_GaussianProcessClassifier',
+         'clean_oht_fRFErf_cleanNN_stdscale_SVC',         
+           
+         'clean_oht_fxgb_cleanNN_XGBClassifier',
+         'clean_oht_fxgb_oside_XGBClassifier',
+         'clean_oht_frf_oside_XGBClassifier',
+         
+         'clean_oht_fxgb_cleanNN_RandomForestClassifier',
+         'clean_oht_frf_RandomForestClassifier',
+         'clean_oht_fxgb_BalancedRandomForestClassifier',   
+         
+         'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
+         'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier', 
+         
+         'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',            
+         ]
+    if X is None:
+        return set(l)
+    else: 
+        lis = []
+        for i in l:
+            m = ML_model(estimator=i)
+            scores = m.cv_validate(X, y, cv=cv, scoring=scoring).mean()
+            scores['pipe'] = i
+            lis.append(scores)
+        return pd.concat(lis, axis=1, ignore_index=True).T
 
 def _reset_index(*array):
     '''reset_index for df or series, return list of *arrays
