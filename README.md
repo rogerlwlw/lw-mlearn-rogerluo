@@ -27,7 +27,7 @@ of:
 
 For deep learning:
 =============
-    - pkg lw_keras based on Keras framework is included
+    Keras framework is included in lw_keras package(currently only for MLP)
 
 Main hepler functions:
 =============
