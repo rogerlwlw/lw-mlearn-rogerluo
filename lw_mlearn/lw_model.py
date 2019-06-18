@@ -24,7 +24,9 @@ from sklearn.model_selection import (GridSearchCV, RandomizedSearchCV,
                                      cross_val_score, cross_validate)
 from sklearn.model_selection import _validation
 from sklearn.metrics import roc_curve, auc
-from sklearn.pipeline import Pipeline
+
+from imblearn.pipeline import Pipeline
+
 from functools import wraps
 from shutil import rmtree
 
@@ -305,12 +307,14 @@ class ML_model(BaseEstimator):
         fpr_ = []
         tpr_ = []
         mean_fpr = np.linspace(0, 1, 100)
-        data_splits = tuple(
+        data_splits = list(
             _split_cv(X, y=y, cv=cv, groups=groups, random_state=self.seed))
         
 
         for x_set, y_set in data_splits:
-            clf.fit(x_set[0], y_set[0], **fit_params)
+            xx = x_set[0]
+            yy = y_set[0]
+            clf.fit(xx, yy, **fit_params)
             y_pre = self._pre_continueous(clf, x_set[1])
             fpr, tpr, threshhold = roc_curve(
                 y_set[1], y_pre, drop_intermediate=True)
@@ -529,6 +533,7 @@ class ML_model(BaseEstimator):
         estimator = self.estimator
         grid = GridSearchCV(estimator, **get_kwargs(GridSearchCV, **L),
                             **kwargs)
+
         grid.fit(X, y, **fit_params)
         cv_results = pd.DataFrame(grid.cv_results_)
         self.estimator = grid.best_estimator_
