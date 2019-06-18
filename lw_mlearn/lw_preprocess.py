@@ -246,7 +246,7 @@ def pipe_main(pipe=None):
             
     estimator.update(
         dummy=DummyClassifier(),
-        XGBClassifier=XGBClassifier(n_jobs=-1),
+        XGBClassifier=XGBClassifier(),
         LogisticRegressionCV=LogisticRegressionCV(scoring='roc_auc'),
         EasyEnsembleClassifier=EasyEnsembleClassifier(),
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(),
@@ -449,6 +449,7 @@ def _param_grid(estimator):
     else:
         print("param_grid for '{}' returned as : \n".format(estimator))
         [print(i) for i in grid]
+        print('...\n')
         
     return grid
 
@@ -635,8 +636,9 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         self.objcols = options.get('object')
         self.numcols = options.get('number')
         self.datetimecols = options.get('datetime')
-        self.obj_na = _get_imputer(self.na1)
+        self.obj_na = _get_imputer(self.na1)   
         self.num_na = _get_imputer(self.na2)
+        
         
         if self.obj_na is not None and not self.objcols.empty:
             self.obj_na.fit(X.reindex(columns=self.objcols))
@@ -686,7 +688,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         othercols = cols.difference(self.objcols.union(self.numcols))            
         date_col = X.reindex(columns=othercols)
             
-        X = pd.concat([obj, num, date_col], axis=1)
+        X = pd.concat((i for i in [obj, num, date_col] if not i.empty), axis=1)
         X = X.reindex(columns=self.out_labels)   
         
         return X
@@ -920,6 +922,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
 
         if cols_notcoded:
             print("{} have not been woe encoded".format(cols_notcoded))
+            
         return pd.concat(cols, axis=1)
 
     def plot_event_rate(self, save_path=None, suffix='.pdf',dw=0.02, up=0.5):
@@ -1294,6 +1297,7 @@ class Oht_encoder(BaseEstimator, TransformerMixin, Base_clean):
         
         self.encoder = OneHotEncoder(**self.get_params())
         self.encoder.fit(X.reindex(columns=self.obj_cols)) 
+        
         self.encoder_fnames = self.encoder.get_feature_names(self.obj_cols)
         self.encode_mapper = dict(zip(self.obj_cols, self.encoder.categories_))      
         self.out_labels = self.encoder_fnames.tolist() + self.not_obj.tolist()
@@ -1312,7 +1316,7 @@ class Oht_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X0 = pd.DataFrame(X0, columns=self.encoder_fnames)
         # --not obj do nothing
         X1 = X.reindex(columns=self.not_obj)
-        rst = pd.concat([X0, X1], axis=1)
+        rst = pd.concat(( i for i in [X0, X1] if not i.empty), axis=1)
         rst = rst.reindex(columns=self.out_labels)
         return rst
 
@@ -1389,10 +1393,12 @@ class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X0 = pd.DataFrame(X0, columns=self.encoder_fnames)
         # --not obj do nothing
         X1 = X.reindex(columns=self.not_obj)
-        rst = pd.concat([X0, X1], axis=1)
+        rst = pd.concat(( i for i in [X0, X1] if not i.empty), axis=1)
         rst = rst.reindex(columns=self.out_labels)
-        return rst    
-    
+        return rst 
+
+
+
     
 def ks_score(y_true, y_pred, pos_label=None):
     '''return K-S score of preditions
