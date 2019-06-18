@@ -32,7 +32,8 @@ def test_model():
          'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
          'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier', 
          
-         'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',            
+         'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',         
+
          ]
     # --
     for i in l:        
