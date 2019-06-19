@@ -246,7 +246,7 @@ def pipe_main(pipe=None):
             
     estimator.update(
         dummy=DummyClassifier(),
-        XGBClassifier=XGBClassifier(),
+        XGBClassifier=XGBClassifier(n_jobs=-1),
         LogisticRegressionCV=LogisticRegressionCV(scoring='roc_auc'),
         EasyEnsembleClassifier=EasyEnsembleClassifier(),
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(),
@@ -334,13 +334,13 @@ def _param_grid(estimator):
             'gamma': np.logspace(-2, 1, 5)
         },
         {
-            'reg_alpha': np.logspace(-2, 2, 5),
-            'reg_lambda': np.logspace(-2, 2, 5)
+            'reg_alpha': np.logspace(-2, 3, 3),
+            'reg_lambda': np.logspace(-2, 3, 10)
         },
 
         {
-            'colsample_bytree': [1, 0.9, 0.8, 0.75],
-            'subsample': [1, 0.9, 0.8, 0.75],
+            'colsample_bytree': [0.95, 0.9, 0.8, 0.75],
+            'subsample': [0.95, 0.9, 0.8, 0.75],
         },
 
     ]
