@@ -5,22 +5,24 @@ Created on Mon Jun  3 17:35:12 2019
 
 @author: rogerluo
 """
+
+
 class Keras_doc_():
-    
-    activation ='''
+
+    activation = '''
         activation: Activation function to use
             (see [activations](../activations.md)).
             If you don't specify anything, no activation is applied
             (ie. "linear" activation: `a(x) = x`).
         '''
-    input_shape='''
+    input_shape = '''
         # Input shape
             nD tensor with shape: `(batch_size, ..., input_dim)`.
             The most common situation would be
             a 2D input with shape `(batch_size, input_dim)`.
         '''
-       
-    output_shape ='''
+
+    output_shape = '''
         # Output shape
             nD tensor with shape: `(batch_size, ..., units)`.
             For instance, for a 2D input with shape `(batch_size, input_dim)`,
@@ -46,7 +48,7 @@ class Keras_doc_():
         multi-output model, you could also pass a dictionary,
         such as `metrics={'output_a': 'accuracy'}`.
         '''
-    target_tensors ='''    
+    target_tensors = '''    
         target_tensors: By default, Keras will create placeholders for the model's
         target, which will be fed with the target data during training. 
         If instead you would like to use your own target tensors (in turn, Keras 
