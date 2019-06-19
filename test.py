@@ -6,7 +6,7 @@ Created on Mon Jun  3 14:10:59 2019
 """
 from lw_mlearn.lw_model import train_models
 from sklearn.datasets import make_classification
-
+import os
 
 def test_model():
     '''with small fake data to walk through workflow
@@ -41,4 +41,5 @@ def test_model():
         model.delete_model()
         
 if __name__ == '__main__':
+    os.chdir('tests')
     test_model()  
