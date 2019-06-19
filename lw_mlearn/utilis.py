@@ -10,19 +10,21 @@ import inspect
 from pandas.core.dtypes import api
 from functools import wraps, reduce
 
+
 def join_embed_keys(dictionary):
     ''' join keys by delimiter '_' from embedding dicts, for instance:
         {k1 : {k2 : v}} to {k1_k2 : v}
     '''
     d = dictionary.copy()
-    while not all([ api.is_scalar(d[k]) for k in d]):
-        for k, v in list(d.items()):                 
+    while not all([api.is_scalar(d[k]) for k in d]):
+        for k, v in list(d.items()):
             if api.is_dict_like(v):
-                v = d.pop(k) 
-                for kk, vv in v.items():  
+                v = d.pop(k)
+                for kk, vv in v.items():
                     key = '_'.join([str(k), str(kk)])
-                    d.update({key: vv})  
+                    d.update({key: vv})
     return d
+
 
 def merge_dfs(df_list, how='inner', **kwargs):
     '''return merged  DataFrames of all in 'df_list'
@@ -108,6 +110,7 @@ def dec_iferror_getargs(func):
 
     return wrapper
 
+
 class Substitution(object):
     """Decorate a function's or a class' docstring to perform string
     substitution on it.
@@ -125,4 +128,3 @@ class Substitution(object):
     def __call__(self, obj):
         obj.__doc__ = obj.__doc__.format(**self.params)
         return obj
-
