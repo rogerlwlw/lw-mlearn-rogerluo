@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 """db_mod
 
 Description
@@ -60,14 +59,7 @@ class SQL_engine():
      
     '''
 
-    def __init__(self,
-                 dialect,
-                 uname,
-                 upwd,
-                 host,
-                 dbname,
-                 port,
-                 DBAPI):
+    def __init__(self, dialect, uname, upwd, host, dbname, port, DBAPI):
         '''
         '''
         self._engine_url = {
@@ -80,7 +72,6 @@ class SQL_engine():
             'DBAPI': DBAPI
         }
 
-
     def getengine(self, **kwargs):
 
         #Oracle client encoding
@@ -90,12 +81,17 @@ class SQL_engine():
         conn_string = '''{dialect}+{DBAPI}://{uname}:{upwd}@{host}:{port}/{dbname}
                           '''.format_map(self._engine_url)
 
-        engine = create_engine(
-            conn_string, encoding=kwargs.get('encoding', 'GBK'), **kwargs)
+        engine = create_engine(conn_string,
+                               encoding=kwargs.get('encoding', 'GBK'),
+                               **kwargs)
         print('database %s is called... \n' % (engine))
         return engine
 
-    def upload_toDB(self, df, name=None, if_exists='fail', dtype=None,
+    def upload_toDB(self,
+                    df,
+                    name=None,
+                    if_exists='fail',
+                    dtype=None,
                     **kwds_pd):
         ''' 
         Parameters
@@ -117,14 +113,13 @@ class SQL_engine():
                 If None, use default schema.        
         '''
         kws = dict(index=False, chunksize=100, con=self.getengine())
-        kws.update(**kwds_pd)        
+        kws.update(**kwds_pd)
         if name is None:
-            name = 'PYTHON_UPLOAD_TAB' 
+            name = 'PYTHON_UPLOAD_TAB'
         if dtype is None:
             dtype = self.get_map_df_types(df)
         print('begin uploading data...\n')
-        df.to_sql(name=name, if_exists=if_exists, 
-                  dtype=dtype, **kws)
+        df.to_sql(name=name, if_exists=if_exists, dtype=dtype, **kws)
         print("successfullly upload data to table: '%s': ... \n" % name,
               df.head(5), '\n in data base: %s \n' % (self.getengine()))
         return
@@ -140,7 +135,7 @@ class SQL_engine():
         df - data frame 
         '''
         print('begin reading sql...\n')
-        engine  = self.getengine()
+        engine = self.getengine()
         df = pd.read_sql_query(sql, engine)
         print('successfully read data: ... \n', df.head(5), '\n',
               'from database: %s \n' % engine)
@@ -164,33 +159,34 @@ class SQL_engine():
             if "object" in str(j) or "category" in str(j):
                 max_length = df[i].apply(lambda x: len(str(x))).max()
                 dtypedict.update(
-                        {i: String(length=255*(max_length//255) + 255)})
+                    {i: String(length=255 * (max_length // 255) + 255)})
             if "float" in str(j):
                 dtypedict.update({i: Float(precision=6, asdecimal=True)})
             if "int" in str(j):
                 dtypedict.update({i: Integer()})
         return dtypedict
 
+
 def __test():
-        db = SQL_engine(               
-                uname="wen_luo_pohoocredit",
-                upwd="AB459300",
-                host="10.30.4.26",
-                dbname="odsdb",
-                port=1521,
-                dialect='oracle',
-                DBAPI='cx_oracle')
-                   
-        import pandas as pd
-        import numpy as np
-        df = pd.DataFrame(np.random.randn(10, 5))
+    db = SQL_engine(uname="wen_luo_pohoocredit",
+                    upwd="AB459300",
+                    host="10.30.4.26",
+                    dbname="odsdb",
+                    port=1521,
+                    dialect='oracle',
+                    DBAPI='cx_oracle')
 
-        db.upload_toDB(df, name='testtable')
+    import pandas as pd
+    import numpy as np
+    df = pd.DataFrame(np.random.randn(10, 5))
 
-        df = db.read_df('select * from  testtable')
+    db.upload_toDB(df, name='testtable')
 
-        db.execute('drop table testtable')
-        return
-    
+    df = db.read_df('select * from  testtable')
+
+    db.execute('drop table testtable')
+    return
+
+
 if __name__ == '__main__':
     __test()
