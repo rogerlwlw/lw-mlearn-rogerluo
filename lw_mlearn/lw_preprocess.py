@@ -11,11 +11,12 @@ import scipy.stats as stats
 from pandas.core.dtypes import api
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.preprocessing import (
-    OrdinalEncoder, OneHotEncoder, PolynomialFeatures, StandardScaler,
-    MinMaxScaler, RobustScaler, Normalizer, QuantileTransformer,
-    PowerTransformer, MaxAbsScaler)
-from sklearn.dummy import  DummyClassifier
+from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder,
+                                   PolynomialFeatures, StandardScaler,
+                                   MinMaxScaler, RobustScaler, Normalizer,
+                                   QuantileTransformer, PowerTransformer,
+                                   MaxAbsScaler)
+from sklearn.dummy import DummyClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
@@ -28,25 +29,11 @@ from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic,
                                               ExpSineSquared, DotProduct,
                                               Exponentiation, ConstantKernel)
 from sklearn.decomposition import (
-   DictionaryLearning,
-   FastICA,
-   IncrementalPCA,
-   KernelPCA,
-   MiniBatchDictionaryLearning,
-   MiniBatchSparsePCA,
-   NMF,
-   PCA,
-   SparseCoder,
-   SparsePCA,
-   dict_learning,
-   dict_learning_online,
-   fastica,
-   non_negative_factorization,
-   randomized_svd,
-   sparse_encode,
-   FactorAnalysis,
-   TruncatedSVD,
-   LatentDirichletAllocation)
+    DictionaryLearning, FastICA, IncrementalPCA, KernelPCA,
+    MiniBatchDictionaryLearning, MiniBatchSparsePCA, NMF, PCA, SparseCoder,
+    SparsePCA, dict_learning, dict_learning_online, fastica,
+    non_negative_factorization, randomized_svd, sparse_encode, FactorAnalysis,
+    TruncatedSVD, LatentDirichletAllocation)
 
 from sklearn.metrics import roc_curve
 from sklearn.impute import SimpleImputer
@@ -89,9 +76,10 @@ from imblearn.ensemble import (
 from imblearn.combine import SMOTEENN, SMOTETomek
 from imblearn import FunctionSampler
 
-from . utilis import (dec_iferror_getargs, get_kwargs)
-from . read_write import Path
-from . plotter import plt, plotter_rateVol
+from .utilis import (dec_iferror_getargs, get_kwargs)
+from .read_write import Path
+from .plotter import plt, plotter_rateVol
+
 
 def pipe_main(pipe=None):
     '''pipeline construction using sklearn estimators, final step support only
@@ -113,14 +101,14 @@ def pipe_main(pipe=None):
         2) if pipe is None, a dict indicating possible choice of 'steps'
     '''
     clean = {
-        'clean' : Split_cls(dtype_filter='not_datetime', na1='null', na2=-999),
-        'cleanNA' : Split_cls(dtype_filter='not_datetime', na1=None, na2=None)
+        'clean': Split_cls(dtype_filter='not_datetime', na1='null', na2=-999),
+        'cleanNA': Split_cls(dtype_filter='not_datetime', na1=None, na2=None)
     }
     #
-    encode = {      
+    encode = {
         'woe': Woe_encoder(max_leaf_nodes=5),
-        'oht' : Oht_encoder(),
-        'ordi' : Ordi_encoder(),
+        'oht': Oht_encoder(),
+        'ordi': Ordi_encoder(),
     }
 
     resample = {
@@ -159,14 +147,14 @@ def pipe_main(pipe=None):
 
         # clean outliers
         'inlierForest':
-        FunctionSampler(
-            outlier_rejection, kw_args={'method': 'IsolationForest'}),
+        FunctionSampler(outlier_rejection,
+                        kw_args={'method': 'IsolationForest'}),
         'inlierLocal':
-        FunctionSampler(
-            outlier_rejection, kw_args={'method': 'LocalOutlierFactor'}),
+        FunctionSampler(outlier_rejection,
+                        kw_args={'method': 'LocalOutlierFactor'}),
         'inlierEllip':
-        FunctionSampler(
-            outlier_rejection, kw_args={'method': 'EllipticEnvelope'}),
+        FunctionSampler(outlier_rejection,
+                        kw_args={'method': 'EllipticEnvelope'}),
         'inlierOsvm':
         FunctionSampler(outlier_rejection, kw_args={'method': 'OneClassSVM'}),
         # combine
@@ -191,13 +179,13 @@ def pipe_main(pipe=None):
     # feature construction
     feature_c = {
         'pca': PCA(whiten=True),
-        'spca' : SparsePCA(normalize_components=True, n_jobs=-1),
+        'spca': SparsePCA(normalize_components=True, n_jobs=-1),
         'ipca': IncrementalPCA(whiten=True),
         'kpca': KernelPCA(kernel='rbf', n_jobs=-1),
         'poly': PolynomialFeatures(degree=2),
         'rtembedding': RandomTreesEmbedding(n_estimators=10),
-        'LDA' : LinearDiscriminantAnalysis(),
-        'QDA' : QuadraticDiscriminantAnalysis(),   
+        'LDA': LinearDiscriminantAnalysis(),
+        'QDA': QuadraticDiscriminantAnalysis(),
     }
     # select from model
     feature_m = {
@@ -205,8 +193,9 @@ def pipe_main(pipe=None):
         SelectFromModel(Woe_encoder(max_leaf_nodes=5)),
         'flog':
         SelectFromModel(
-            LogisticRegressionCV(
-                penalty='l1', solver='saga', scoring='roc_auc')),
+            LogisticRegressionCV(penalty='l1',
+                                 solver='saga',
+                                 scoring='roc_auc')),
         'fsgd':
         SelectFromModel(SGDClassifier(penalty="l1")),
         'fsvm':
@@ -215,15 +204,17 @@ def pipe_main(pipe=None):
         SelectFromModel(XGBClassifier(n_jobs=-1)),
         'frf':
         SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5)),
-        
         'fRFExgb':
-        RFE(XGBClassifier(n_jobs=-1), step=0.1,  n_features_to_select=15),
+        RFE(XGBClassifier(n_jobs=-1), step=0.1, n_features_to_select=15),
         'fRFErf':
-        RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5), step=0.1, 
+        RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5),
+            step=0.1,
             n_features_to_select=15),
         'fRFElog':
-        RFE(LogisticRegressionCV(penalty='l1', solver='saga', scoring='roc_auc'), 
-            step=0.1, 
+        RFE(LogisticRegressionCV(penalty='l1',
+                                 solver='saga',
+                                 scoring='roc_auc'),
+            step=0.1,
             n_features_to_select=15)
     }
     # Univariate feature selection
@@ -240,10 +231,10 @@ def pipe_main(pipe=None):
     estimator = {}
     for i in t:
         try:
-            estimator.update({i[0] : i[1]()})
+            estimator.update({i[0]: i[1]()})
         except Exception:
             continue
-            
+
     estimator.update(
         dummy=DummyClassifier(),
         XGBClassifier=XGBClassifier(n_jobs=-1),
@@ -251,8 +242,7 @@ def pipe_main(pipe=None):
         EasyEnsembleClassifier=EasyEnsembleClassifier(),
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(),
         RUSBoostClassifier=RUSBoostClassifier(),
-        SVC = SVC(C=0.01, gamma='auto')
-    )
+        SVC=SVC(C=0.01, gamma='auto'))
 
     if pipe is None:
         feature_s = {}
@@ -299,13 +289,13 @@ def pipe_grid(estimator, pipe_grid=True):
         keys = estimator.__class__.__name__
 
     param_grid = _param_grid(keys)
-    
+
     if param_grid is None:
         return
-    
+
     if pipe_grid is True:
-        return [{'__'.join([keys, k]): i.get(k) for k in i.keys()} 
-                for i in param_grid if api.is_dict_like(i)]
+        return [{'__'.join([keys, k]): i.get(k)
+                 for k in i.keys()} for i in param_grid if api.is_dict_like(i)]
     else:
         return param_grid
 
@@ -323,7 +313,7 @@ def _param_grid(estimator):
         {
             'learning_rate': np.logspace(-3, 0, 5),
             'n_estimators': np.arange(50, 200, 20).astype(int),
-        }, 
+        },
         {
             'scale_pos_weight': np.logspace(0, 1.5, 5)
         },
@@ -337,35 +327,28 @@ def _param_grid(estimator):
             'reg_alpha': np.logspace(-2, 3, 3),
             'reg_lambda': np.logspace(-2, 3, 10)
         },
-
         {
             'colsample_bytree': [0.95, 0.9, 0.8, 0.75],
             'subsample': [0.95, 0.9, 0.8, 0.75],
         },
-
     ]
 
     AdaBoostClassifier = [
-            {
-            'learning_rate' : np.logspace(-3, 0, 5),            
-            },
-            {
-            'n_estimators' : np.logspace(1.5, 2.5, 5).astype(int),
-            },
-
-    ]
-
-    SVC = [
         {
-            'kernel': ['rbf', 'sigmoid', 'poly'],
+            'learning_rate': np.logspace(-3, 0, 5),
         },
         {
-            'gamma': np.logspace(-5, 5, 5),
+            'n_estimators': np.logspace(1.5, 2.5, 5).astype(int),
         },
-        {
-            'C': np.logspace(-5, 1, 5)
-        }
     ]
+
+    SVC = [{
+        'kernel': ['rbf', 'sigmoid', 'poly'],
+    }, {
+        'gamma': np.logspace(-5, 5, 5),
+    }, {
+        'C': np.logspace(-5, 1, 5)
+    }]
 
     RandomForestClassifier = [
         {
@@ -376,20 +359,19 @@ def _param_grid(estimator):
             'n_estimators': np.logspace(1.5, 2.5, 10).astype(int)
         },
     ]
-    
-    GradientBoostingClassifier = [
-        {
-            'max_depth': range(2, 5),
-            'min_samples_leaf': np.logspace(-5, -1, 5),
-        },
-        {
-            'n_estimators': np.logspace(1.5, 2.5, 10).astype(int)
-        },
-        {'subsample' : [1, 0.9, 0.8, 0.75]}
-    ]
+
+    GradientBoostingClassifier = [{
+        'max_depth': range(2, 5),
+        'min_samples_leaf': np.logspace(-5, -1, 5),
+    }, {
+        'n_estimators':
+        np.logspace(1.5, 2.5, 10).astype(int)
+    }, {
+        'subsample': [1, 0.9, 0.8, 0.75]
+    }]
 
     GaussianProcessClassifier = [{
-        'kernel': [ConstantKernel()*RBF(),
+        'kernel': [ConstantKernel() * RBF(),
                    RationalQuadratic(),
                    Matern()],
     }]
@@ -413,26 +395,32 @@ def _param_grid(estimator):
             'eta0': [0.01]
         },
     ]
-        
-    
-    LabelPropagation = [
-            {'kernel' : ['rbf'], 'gamma' : np.logspace(-5, 1, 5)},
-            {'kernel' : ['knn'], 
-             'n_neighbors' : np.logspace(0, 1.2, 5).astype(int)},
-            
-            ]
 
-    kpca = [{'kernel' : ['linear', 'sigmoid', 'rbf']},
-            {'alpha' : np.logspace(0, 2, 5)},
-            {'gamma' : np.logspace(-5, 0, 5)}]
-    
-    spca = [
-            {'n_components' : np.logspace(1.2, 2, 5).astype(int)},
-            {'alpha' : np.logspace(-1, 3, 5)}
-            
+    LabelPropagation = [
+        {
+            'kernel': ['rbf'],
+            'gamma': np.logspace(-5, 1, 5)
+        },
+        {
+            'kernel': ['knn'],
+            'n_neighbors': np.logspace(0, 1.2, 5).astype(int)
+        },
     ]
-    
-    
+
+    kpca = [{
+        'kernel': ['linear', 'sigmoid', 'rbf']
+    }, {
+        'alpha': np.logspace(0, 2, 5)
+    }, {
+        'gamma': np.logspace(-5, 0, 5)
+    }]
+
+    spca = [{
+        'n_components': np.logspace(1.2, 2, 5).astype(int)
+    }, {
+        'alpha': np.logspace(-1, 3, 5)
+    }]
+
     param_grids = locals().copy()
     param_grids.update({
         'RUSBoostClassifier':
@@ -443,14 +431,13 @@ def _param_grid(estimator):
 
     grid = param_grids.get(estimator)
 
-    if grid is None:       
-        print("key '{}' not found, param_grid not returned".format(
-                estimator))
+    if grid is None:
+        print("key '{}' not found, param_grid not returned".format(estimator))
     else:
         print("param_grid for '{}' returned as : \n".format(estimator))
         [print(i) for i in grid]
         print('...\n')
-        
+
     return grid
 
 
@@ -464,7 +451,7 @@ def outlier_rejection(X=None,
         IsolationForest(contamination=contamination),
         LocalOutlierFactor(contamination=contamination),
         OneClassSVM(nu=contamination),
-        EllipticEnvelope(contamination=contamination),       
+        EllipticEnvelope(contamination=contamination),
     )
 
     outlier_model = {i.__class__.__name__: i for i in outlier_model}
@@ -587,8 +574,11 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         - fill na stategy for numeric data column, default None
     '''
 
-    def __init__(self, dtype_filter='not_datetime', verbose=0, 
-                 na1=None, na2=None):
+    def __init__(self,
+                 dtype_filter='not_datetime',
+                 verbose=0,
+                 na1=None,
+                 na2=None):
         ''' 
         '''
         L = locals().copy()
@@ -599,7 +589,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         '''fit input_labels & out_labels 
         '''
         X = self._fit(X)
-        
+
         # drop na columns
         na_col = X.columns[X.apply(lambda x: all(x.isna()))]
         X.dropna(axis=1, how='all', inplace=True)
@@ -610,20 +600,20 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
             if api.is_object_dtype(col):
                 if len(pd.unique(col)) > 40:
                     X.drop(k, axis=1, inplace=True)
-                    uid_col.append(k)                    
+                    uid_col.append(k)
             elif api.is_integer_dtype(col):
-                if len(pd.unique(col)) > 0.85*len(col):
+                if len(pd.unique(col)) > 0.85 * len(col):
                     X.drop(k, axis=1, inplace=True)
                     uid_col.append(k)
-        
+
         # drop constant
         const_col = []
         for k, col in X.iteritems():
             if (api.is_numeric_dtype(col) and col.std()<0.01) \
             or len(pd.unique(col))==1:
-                 X.drop(k, axis=1, inplace=True)
-                 const_col.append(k)           
-       
+                X.drop(k, axis=1, inplace=True)
+                const_col.append(k)
+
         # filter dtypes
         options = {
             'not_datetime': X.select_dtypes(exclude='datetime').columns,
@@ -632,19 +622,18 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
             'datetime': X.select_dtypes(include='datetime').columns,
             'all': X.columns
         }
-                
+
         self.objcols = options.get('object')
         self.numcols = options.get('number')
         self.datetimecols = options.get('datetime')
-        self.obj_na = _get_imputer(self.na1)   
+        self.obj_na = _get_imputer(self.na1)
         self.num_na = _get_imputer(self.na2)
-        
-        
+
         if self.obj_na is not None and not self.objcols.empty:
             self.obj_na.fit(X.reindex(columns=self.objcols))
         if self.num_na is not None and not self.numcols.empty:
             self.num_na.fit(X.reindex(columns=self.numcols))
-            
+
         self.out_labels = options.get(self.dtype_filter).tolist()
         # --
         if len(na_col) > 0:
@@ -671,26 +660,26 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         '''transform X to df of specified filter_dtype
         '''
         X = self._filter_labels(X)
-        # --        
+        # --
         if self.obj_na is not None and not self.objcols.empty:
             obj = self.obj_na.transform(X.reindex(columns=self.objcols))
             obj = pd.DataFrame(obj, columns=self.objcols)
         else:
             obj = X.reindex(columns=self.objcols)
-            
+
         if self.num_na is not None and not self.numcols.empty:
-            num = self.num_na.transform(X.reindex(columns=self.numcols)) 
+            num = self.num_na.transform(X.reindex(columns=self.numcols))
             num = pd.DataFrame(num, columns=self.numcols)
         else:
             num = X.reindex(columns=self.numcols)
-       
+
         cols = set(self.out_labels)
-        othercols = cols.difference(self.objcols.union(self.numcols))            
+        othercols = cols.difference(self.objcols.union(self.numcols))
         date_col = X.reindex(columns=othercols)
-            
+
         X = pd.concat((i for i in [obj, num, date_col] if not i.empty), axis=1)
-        X = X.reindex(columns=self.out_labels)   
-        
+        X = X.reindex(columns=self.out_labels)
+
         return X
 
 
@@ -849,27 +838,29 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         for name, col in X.iteritems():
             if name in self.edges:
                 edges = self.edges.get(name)
-                col_binned = pd.cut(
-                    col, edges, retbins=False, duplicates='drop')
+                col_binned = pd.cut(col,
+                                    edges,
+                                    retbins=False,
+                                    duplicates='drop')
                 cols.append(col_binned)
             else:
                 cols.append(col)
         return pd.concat(cols, axis=1)
-   
+
     @property
     def feature_importances_(self):
         '''
         '''
         if hasattr(self, 'feature_iv'):
-           
+
             print('''IV >0.5 or IV < 0.02 has been forced to 0 due to
                   meaningless value''')
             value = self.feature_iv
-            iv = self.feature_iv.where((0.02<value) & (value<0.5))
+            iv = self.feature_iv.where((0.02 < value) & (value < 0.5))
             return iv
         else:
             return
-          
+
     def fit(self, X, y):
         '''fit X(based on CART Tree) to get cutting edges
         (updated by input edges) and  calculate woe & iv for each cat group
@@ -889,8 +880,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         self.edges.update(self.input_edges)
         # --
         df_binned = self._get_binned(X)
-        self.woe_iv, self.woe_map, self.feature_iv = calc_woe(
-            df_binned, y)
+        self.woe_iv, self.woe_map, self.feature_iv = calc_woe(df_binned, y)
         print(self.woe_iv)
         return self
 
@@ -922,15 +912,13 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
 
         if cols_notcoded:
             print("{} have not been woe encoded".format(cols_notcoded))
-            
+
         return pd.concat(cols, axis=1)
 
-    def plot_event_rate(self, save_path=None, suffix='.pdf',dw=0.02, up=0.5):
+    def plot_event_rate(self, save_path=None, suffix='.pdf', dw=0.02, up=0.5):
         '''return iv of each column using self.edges
         '''
         plotter_woeiv_event(self.woe_iv, save_path, suffix, dw, up)
-
-
 
 
 def _tree_univar_bin(arr_x, arr_y, **kwargs):
@@ -1096,8 +1084,10 @@ def _binning(y_pre=None,
         if y_true is None:
             raise ValueError('y_true must be supplied tree cut')
         y_pre0 = pd.DataFrame(y_pre)
-        bins_dict = bin_tree(
-            y_pre0, y_true, max_leaf_nodes=max_leaf_nodes, **kwargs)
+        bins_dict = bin_tree(y_pre0,
+                             y_true,
+                             max_leaf_nodes=max_leaf_nodes,
+                             **kwargs)
         bins = list(bins_dict.values())[0]
 
     if isinstance(bins, int):
@@ -1110,8 +1100,11 @@ def _binning(y_pre=None,
 
     if labels is True:
         labels = None
-    y_bins, bins = pd.cut(
-        y_pre, bins, duplicates='drop', retbins=True, labels=labels)
+    y_bins, bins = pd.cut(y_pre,
+                          bins,
+                          duplicates='drop',
+                          retbins=True,
+                          labels=labels)
     return y_bins, bins
 
 
@@ -1136,8 +1129,9 @@ def _woe_binning(X,
         y_notna = df.dropna().y
         if (len(pd.unique(col_notna)) > cat_num_lim \
             and api.is_numeric_dtype(col_notna)):
-            label, bin_edges[name] = _binning(
-                col_notna, bins, q, max_leaf_nodes, y_notna, **kwargs)
+            label, bin_edges[name] = _binning(col_notna, bins, q,
+                                              max_leaf_nodes, y_notna,
+                                              **kwargs)
     return bin_edges
 
 
@@ -1221,7 +1215,6 @@ def calc_woe(df_binned, y):
         - colname--> iv 
     '''
 
-
     l = []
     woe_map = {}
     iv = []
@@ -1264,8 +1257,13 @@ class Oht_encoder(BaseEstimator, TransformerMixin, Base_clean):
         - dict egg. {cloname : array(category names)}, 
     '''
 
-    def __init__(self,  sparse=False, dtype=np.float64, handle_unknown='ignore', 
-                 n_values=None, categorical_features=None, categories=None,  
+    def __init__(self,
+                 sparse=False,
+                 dtype=np.float64,
+                 handle_unknown='ignore',
+                 n_values=None,
+                 categorical_features=None,
+                 categories=None,
                  drop=None):
         '''
         '''
@@ -1280,8 +1278,8 @@ class Oht_encoder(BaseEstimator, TransformerMixin, Base_clean):
         if len(self.encode_mapper) == 0: return X
         #
         mapper = self.encode_mapper
-        isin_cat = X.apply(
-            lambda x: x.isin(mapper.get(x.name, x)) | x.isna(), axis=0)
+        isin_cat = X.apply(lambda x: x.isin(mapper.get(x.name, x)) | x.isna(),
+                           axis=0)
         out_c = np.ravel(~isin_cat).sum()
         if out_c > 0:
             print('''total of {} element out of categories and 
@@ -1294,14 +1292,14 @@ class Oht_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X = self._fit(X)
         self.obj_cols = X.select_dtypes('object').columns
         self.not_obj = X.columns.difference(self.obj_cols)
-        
+
         self.encoder = OneHotEncoder(**self.get_params())
-        self.encoder.fit(X.reindex(columns=self.obj_cols)) 
-        
+        self.encoder.fit(X.reindex(columns=self.obj_cols))
+
         self.encoder_fnames = self.encoder.get_feature_names(self.obj_cols)
-        self.encode_mapper = dict(zip(self.obj_cols, self.encoder.categories_))      
+        self.encode_mapper = dict(zip(self.obj_cols, self.encoder.categories_))
         self.out_labels = self.encoder_fnames.tolist() + self.not_obj.tolist()
-                                              
+
         return self
 
     def transform(self, X):
@@ -1316,9 +1314,10 @@ class Oht_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X0 = pd.DataFrame(X0, columns=self.encoder_fnames)
         # --not obj do nothing
         X1 = X.reindex(columns=self.not_obj)
-        rst = pd.concat(( i for i in [X0, X1] if not i.empty), axis=1)
+        rst = pd.concat((i for i in [X0, X1] if not i.empty), axis=1)
         rst = rst.reindex(columns=self.out_labels)
         return rst
+
 
 class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
     ''' 
@@ -1357,8 +1356,8 @@ class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
         if len(self.encode_mapper) == 0: return X
         #
         mapper = self.encode_mapper
-        isin_cat = X.apply(
-            lambda x: x.isin(mapper.get(x.name, x)) | x.isna(), axis=0)
+        isin_cat = X.apply(lambda x: x.isin(mapper.get(x.name, x)) | x.isna(),
+                           axis=0)
         out_c = np.ravel(~isin_cat).sum()
         if out_c > 0:
             print('''total of {} element out of categories and 
@@ -1372,13 +1371,13 @@ class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X = self._fit(X)
         self.obj_cols = X.select_dtypes('object').columns
         self.not_obj = X.columns.difference(self.obj_cols)
-        
+
         self.encoder = OrdinalEncoder(**self.get_params())
-        self.encoder.fit(X.reindex(columns=self.obj_cols)) 
+        self.encoder.fit(X.reindex(columns=self.obj_cols))
         self.encoder_fnames = self.obj_cols
-        self.encode_mapper = dict(zip(self.obj_cols, self.encoder.categories_))      
+        self.encode_mapper = dict(zip(self.obj_cols, self.encoder.categories_))
         self.out_labels = self.encoder_fnames.tolist() + self.not_obj.tolist()
-                                              
+
         return self
 
     def transform(self, X):
@@ -1393,19 +1392,18 @@ class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
         X0 = pd.DataFrame(X0, columns=self.encoder_fnames)
         # --not obj do nothing
         X1 = X.reindex(columns=self.not_obj)
-        rst = pd.concat(( i for i in [X0, X1] if not i.empty), axis=1)
+        rst = pd.concat((i for i in [X0, X1] if not i.empty), axis=1)
         rst = rst.reindex(columns=self.out_labels)
-        return rst 
+        return rst
 
 
-
-    
 def ks_score(y_true, y_pred, pos_label=None):
     '''return K-S score of preditions
     '''
     fpr, tpr, _ = roc_curve(y_true, y_pred, pos_label=None)
-    ks = (tpr - fpr).max()   
+    ks = (tpr - fpr).max()
     return ks
+
 
 def re_fearturename(estimator):
     '''return featurenames of an estimator wrapped in a pipeline
@@ -1423,7 +1421,7 @@ def re_fearturename(estimator):
                 if fn is not None: break
             if hasattr(tr, 'get_support'):
                 su = tr.get_support()
-                
+
         if fn is None:
             print('estimator has no feature_names attribute')
             return
@@ -1440,14 +1438,15 @@ def _get_imputer(imput):
         imputer = SimpleImputer(strategy='constant', fill_value=imput)
     elif imput == 'mean':
         imputer = SimpleImputer(strategy='mean')
-    elif imput == 'most_frequent' :
+    elif imput == 'most_frequent':
         imputer = SimpleImputer(strategy='most_frequent')
     elif isinstance(imput, str):
         imputer = SimpleImputer(strategy='constant', fill_value=imput)
     else:
         return
-        
+
     return imputer
+
 
 def plotter_lift_curve(y_pre,
                        y_true,
@@ -1485,14 +1484,13 @@ def plotter_lift_curve(y_pre,
     xlabel
         - xlabel for xaxis
     '''
-    y_cut, bins = _binning(
-        y_pre,
-        y_true=y_true,
-        bins=bins,
-        q=q,
-        max_leaf_nodes=max_leaf_nodes,
-        labels=labels,
-        **kwargs)
+    y_cut, bins = _binning(y_pre,
+                           y_true=y_true,
+                           bins=bins,
+                           q=q,
+                           max_leaf_nodes=max_leaf_nodes,
+                           labels=labels,
+                           **kwargs)
     df0 = pd.DataFrame({'y_cut': y_cut, 'y_true': y_true})
     df_gb = df0.groupby('y_cut')
     df1 = pd.DataFrame()
@@ -1505,9 +1503,11 @@ def plotter_lift_curve(y_pre,
     plotted_data = df1.dropna()
     ax = plotter_rateVol(plotted_data, ax=ax)
     plt.title(header, fontsize=14)
-    return ax, y_cut, bins, plotted_data      
-    
-def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02, up=0.5):
+    return ax, y_cut, bins, plotted_data
+
+
+def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02,
+                        up=0.5):
     '''plot event rate for given woe_iv Dataframe
     see woe_encoder
     '''
@@ -1524,5 +1524,5 @@ def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02, up=0.5):
             print('(%s)-->\n' % n)
             plt.show()
             plt.close()
-        
-    return   
+
+    return
