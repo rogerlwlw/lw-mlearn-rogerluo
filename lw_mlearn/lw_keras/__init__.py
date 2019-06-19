@@ -1,4 +1,3 @@
 #
 
-from . mlp import bfn_dense
-
+from .mlp import bfn_dense
