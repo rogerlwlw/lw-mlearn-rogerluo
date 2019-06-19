@@ -19,7 +19,7 @@ from . keras_doc_string import Keras_doc_
               metrics=Keras_doc_.metrics.strip(),
               input_shape=Keras_doc_.input_shape.strip()) 
 def bfn_dense( dense_layer=(1,), 
-               dropout=(1,), 
+               dropout=(0,), 
                input_shape=(32,),
                out_activation='sigmoid', 
                hidden_activation='sigmoid', 
