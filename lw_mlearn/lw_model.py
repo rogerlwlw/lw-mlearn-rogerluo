@@ -30,12 +30,11 @@ from imblearn.pipeline import Pipeline
 from functools import wraps
 from shutil import rmtree
 
-from . utilis import get_flat_list, get_kwargs
-from . plotter import ( plotter_auc, plotter_cv_results_, plotter_score_path)
-from . read_write import Objs_management
-from . lw_preprocess import (pipe_main, pipe_grid, _binning, re_fearturename,
-                             plotter_lift_curve)
-
+from .utilis import get_flat_list, get_kwargs
+from .plotter import (plotter_auc, plotter_cv_results_, plotter_score_path)
+from .read_write import Objs_management
+from .lw_preprocess import (pipe_main, pipe_grid, _binning, re_fearturename,
+                            plotter_lift_curve)
 
 
 class ML_model(BaseEstimator):
@@ -92,7 +91,7 @@ class ML_model(BaseEstimator):
         ''' return ML_model instance from saved configuration parameters
         '''
         return ML_model(**config)
-    
+
     def __init__(self,
                  estimator=None,
                  path='model',
@@ -115,18 +114,17 @@ class ML_model(BaseEstimator):
                 self.estimator = estimator
             else:
                 raise ValueError('invalid estimator input type: {}'.format(
-                        estimator.__class__.__name__))
+                    estimator.__class__.__name__))
         else:
             gen, _ = self.folder.read_all(suffix='.pipe')
             if len(gen) > 0:
                 self.estimator = gen[0]
                 print('estimator {} has been read from {}'.format(
-                        self.estimator.__class__.__name__, self.folder.path_))
-            else: 
+                    self.estimator.__class__.__name__, self.folder.path_))
+            else:
                 self.estimator = pipe_main('dummy')
                 print('no estimator input, use a dummy classifier ... \n')
 
-    
     def _shut_temp_folder(self):
         '''shut temp folder directory
         '''
@@ -174,11 +172,11 @@ class ML_model(BaseEstimator):
                 "file with '{}' suffix not found in 'data' folder... \n".
                 format(suffix))
         return gen
-    
+
     @property
     def folder(self):
         return Objs_management(self.path)
-    
+
     def plot_auc_test(self,
                       X,
                       y,
@@ -216,8 +214,8 @@ class ML_model(BaseEstimator):
             xs = []
             ys = []
             data_splits = tuple(
-                _split_cv(
-                    X, y=y, cv=cv, groups=groups, random_state=self.seed))
+                _split_cv(X, y=y, cv=cv, groups=groups,
+                          random_state=self.seed))
             for x_set, y_set in data_splits:
                 xs.append(x_set[1])
                 ys.append(y_set[1])
@@ -309,22 +307,21 @@ class ML_model(BaseEstimator):
         mean_fpr = np.linspace(0, 1, 100)
         data_splits = list(
             _split_cv(X, y=y, cv=cv, groups=groups, random_state=self.seed))
-        
 
         for x_set, y_set in data_splits:
             xx = x_set[0]
             yy = y_set[0]
             clf.fit(xx, yy, **fit_params)
             y_pre = self._pre_continueous(clf, x_set[1])
-            fpr, tpr, threshhold = roc_curve(
-                y_set[1], y_pre, drop_intermediate=True)
+            fpr, tpr, threshhold = roc_curve(y_set[1],
+                                             y_pre,
+                                             drop_intermediate=True)
             tprs.append(interp(mean_fpr, fpr, tpr))
             fpr_.append(fpr)
             tpr_.append(tpr)
             tprs[-1][0] = 0.0
             roc_auc = auc(fpr, tpr)
             aucs.append(roc_auc)
-
 
         mean_auc = np.mean(aucs)
         std_auc = np.std(aucs)
@@ -334,10 +331,8 @@ class ML_model(BaseEstimator):
 
         ax = plotter_auc(fpr_, tpr_, ax=ax)
 
-        header = '-'.join([
-            _get_estimator_name(clf), 'trainCV', '{} samples'.format(
-                len(y))
-        ])
+        header = '-'.join(
+            [_get_estimator_name(clf), 'trainCV', '{} samples'.format(len(y))])
         if isinstance(title, str):
             header = '-'.join([title, header])
         ax.set_title(header)
@@ -601,8 +596,9 @@ class ML_model(BaseEstimator):
         if np.ndim(y_pre) > 1:
             y_pre = y_pre[:, pos_label]
         if pre_level:
-            y_pre, bins = _binning(
-                y_pre, bins=self.estimator.bins, labels=False)
+            y_pre, bins = _binning(y_pre,
+                                   bins=self.estimator.bins,
+                                   labels=False)
         return y_pre
 
     def run_train(self,
@@ -717,18 +713,17 @@ class ML_model(BaseEstimator):
             X_test = i[0]
             y_test = i[1]
             # plot test auc
-            testcv = self.plot_auc_test(
-                X_test,
-                y_test,
-                title=j,
-                **get_kwargs(self.plot_auc_test, **L, **kwargs))
+            testcv = self.plot_auc_test(X_test,
+                                        y_test,
+                                        title=j,
+                                        **get_kwargs(self.plot_auc_test, **L,
+                                                     **kwargs))
             # plot lift curve
-            test_lift = self.plot_lift(
-                X_test,
-                y_test,
-                title=j,
-                **get_kwargs(self.plot_lift, **L),
-                **kwargs)
+            test_lift = self.plot_lift(X_test,
+                                       y_test,
+                                       title=j,
+                                       **get_kwargs(self.plot_lift, **L),
+                                       **kwargs)
             # test scores
             scores = self.test_score(X_test, y_test, cv=cv, scoring=scoring)
             scores['group'] = str(j)
@@ -736,8 +731,8 @@ class ML_model(BaseEstimator):
             if self.verbose > 0:
                 print(
                     'test cv_score & cv_splits test data are being saved... ')
-                folder.write(
-                    testcv[-1], file='spreadsheet/TestSplits{}.xlsx'.format(j))
+                folder.write(testcv[-1],
+                             file='spreadsheet/TestSplits{}.xlsx'.format(j))
                 folder.write(
                     [test_lift[-1], scores],
                     sheet_name=['lift_curve', 'test_score'],
@@ -788,14 +783,14 @@ class ML_model(BaseEstimator):
             train_set = self._get_dataset('.traindata')[0]
         else:
             folder.write(train_set, 'data/0.traindata')
-        
-        if param_grid is -1:           
+
+        if param_grid is -1:
             param_grid = []
             for k, v in self.estimator.named_steps.items():
                 grid = pipe_grid(k)
                 if grid is not None:
                     param_grid.extend(grid)
-        
+
         if len(param_grid) == 0:
             print('no param_grid found, skip grid search')
             return
@@ -806,14 +801,13 @@ class ML_model(BaseEstimator):
                 os.path.join(self.folder.path_, 'tempfolder'))
 
         X, y = train_set
-        cv_results = []        
+        cv_results = []
         for i, grid in enumerate(get_flat_list(param_grid)):
-            self.grid_searchcv(
-                X,
-                y=y,
-                param_grid=grid,
-                **get_kwargs(self.grid_searchcv, **L),
-                **kwargs)
+            self.grid_searchcv(X,
+                               y=y,
+                               param_grid=grid,
+                               **get_kwargs(self.grid_searchcv, **L),
+                               **kwargs)
             self.plot_gridcv(save_fig=save_fig, title=str(i))
             cv_results.append(self.gridcv_results)
 
@@ -844,18 +838,19 @@ class ML_model(BaseEstimator):
         if grid_search is True:
             self.run_sensitivity(train_set, scoring=scoring)
 
-        self.trainscore = self.run_train(
-            train_set,
-            cv=cv,
-            q=q,
-            bins=bins,
-            max_leaf_nodes=max_leaf_nodes)
+        self.trainscore = self.run_train(train_set,
+                                         cv=cv,
+                                         q=q,
+                                         bins=bins,
+                                         max_leaf_nodes=max_leaf_nodes)
         print('cv score = \n', self.trainscore, '\n')
 
         try:
-           self.testscore = self.run_test(
-                test_set, title=test_title, cv=cv, use_self_bins=True)
-           print(self.testscore, '\n')
+            self.testscore = self.run_test(test_set,
+                                           title=test_title,
+                                           cv=cv,
+                                           use_self_bins=True)
+            print(self.testscore, '\n')
         except FileNotFoundError:
             print('None test_set data, skip run_test ')
             pass
@@ -870,13 +865,13 @@ class ML_model(BaseEstimator):
         # save esimator
         folder.write(self.estimator,
                      _get_estimator_name(self.estimator) + '.pipe')
-        
-        folder.write(self.get_params(False), 
+
+        folder.write(self.get_params(False),
                      self.__class__.__name__ + 'Param.pkl')
 
         folder.write(
-            self, self.__class__.__name__ + _get_estimator_name(self.estimator)
-            + '.ml')
+            self, self.__class__.__name__ +
+            _get_estimator_name(self.estimator) + '.ml')
 
     def delete_model(self):
         '''delete self.folder.path_ folder containing model
@@ -888,7 +883,6 @@ class ML_model(BaseEstimator):
         '''get input feature names of final estimator
         '''
         return re_fearturename(self.estimator)
-
 
 
 def train_models(estimator,
@@ -907,38 +901,37 @@ def train_models(estimator,
         pipe_main() input str in format of 'xx_xx_xx[_xx]', see pipe_main()
     '''
     model = ML_model(estimator, estimator, verbose=verbose)
-    model.run_analysis(train_set, test_set, test_title, max_leaf_nodes,
+    model.run_analysis(train_set,
+                       test_set,
+                       test_title,
+                       max_leaf_nodes,
                        grid_search=grid_search,
                        **kwargs)
     return model
+
 
 def model_experiments(X=None, y=None, cv=3, scoring='roc_auc'):
     ''' experiment on different piplines of chained estimators
     '''
     l = [
-         'clean_oht_LDA_fxgb_cleanNN_AdaBoostClassifier',
-         'clean_oht_fxgb_RUSBoostClassifier', 
-         
-         'clean_oht_fRFElog_cleanNN_stdscale_GaussianProcessClassifier',          
-         'clean_oht_fRFErf_cleanNN_stdscale_GaussianProcessClassifier',
-         'clean_oht_fRFErf_cleanNN_stdscale_SVC',         
-           
-         'clean_oht_fxgb_cleanNN_XGBClassifier',
-         'clean_oht_fxgb_oside_XGBClassifier',
-         'clean_oht_frf_oside_XGBClassifier',
-         
-         'clean_oht_fxgb_cleanNN_RandomForestClassifier',
-         'clean_oht_frf_RandomForestClassifier',
-         'clean_oht_fxgb_BalancedRandomForestClassifier',   
-         
-         'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
-         'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier', 
-         
-         'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',            
-         ]
+        'clean_oht_LDA_fxgb_cleanNN_AdaBoostClassifier',
+        'clean_oht_fxgb_RUSBoostClassifier',
+        'clean_oht_fRFElog_cleanNN_stdscale_GaussianProcessClassifier',
+        'clean_oht_fRFErf_cleanNN_stdscale_GaussianProcessClassifier',
+        'clean_oht_fRFErf_cleanNN_stdscale_SVC',
+        'clean_oht_fxgb_cleanNN_XGBClassifier',
+        'clean_oht_fxgb_oside_XGBClassifier',
+        'clean_oht_frf_oside_XGBClassifier',
+        'clean_oht_fxgb_cleanNN_RandomForestClassifier',
+        'clean_oht_frf_RandomForestClassifier',
+        'clean_oht_fxgb_BalancedRandomForestClassifier',
+        'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
+        'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier',
+        'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
+    ]
     if X is None:
         return set(l)
-    else: 
+    else:
         lis = []
         for i in l:
             m = ML_model(estimator=i)
@@ -946,6 +939,7 @@ def model_experiments(X=None, y=None, cv=3, scoring='roc_auc'):
             scores['pipe'] = i
             lis.append(scores)
         return pd.concat(lis, axis=1, ignore_index=True).T
+
 
 def _reset_index(*array):
     '''reset_index for df or series, return list of *arrays
@@ -1009,6 +1003,7 @@ def _split_cv(*arrays, y=None, groups=None, cv=3, random_state=None):
 
     return train_test
 
+
 def _get_estimator_name(estimator):
     '''return estimator's class name
     '''
@@ -1037,9 +1032,3 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_test
     if ret_type == 'train':
         return data_splits_train
-
-
-
-
-
-        
