@@ -48,8 +48,9 @@ def yapf_allfile(rootdir='.',
                     'BLANK_LINES_AROUND_TOP_LEVEL_DEFINITION': 2
                 }
                 config.update(**knobs)
-                yapf.yapf_api.FormatFile(
-                    file, style_config=config, in_place=True)
+                yapf.yapf_api.FormatFile(file,
+                                         style_config=config,
+                                         in_place=True)
                 print("{} has been code formated as '{}' ...\n".format(
                     file, style))
         except Exception:
