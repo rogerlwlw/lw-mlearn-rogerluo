@@ -166,27 +166,3 @@ class SQL_engine():
                 dtypedict.update({i: Integer()})
         return dtypedict
 
-
-def __test():
-    db = SQL_engine(uname="wen_luo_pohoocredit",
-                    upwd="AB459300",
-                    host="10.30.4.26",
-                    dbname="odsdb",
-                    port=1521,
-                    dialect='oracle',
-                    DBAPI='cx_oracle')
-
-    import pandas as pd
-    import numpy as np
-    df = pd.DataFrame(np.random.randn(10, 5))
-
-    db.upload_toDB(df, name='testtable')
-
-    df = db.read_df('select * from  testtable')
-
-    db.execute('drop table testtable')
-    return
-
-
-if __name__ == '__main__':
-    __test()
