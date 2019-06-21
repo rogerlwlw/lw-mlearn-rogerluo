@@ -23,11 +23,11 @@ def bfn_dense(dense_layer=(1, ),
               dropout=(0, ),
               input_shape=(32, ),
               out_activation='sigmoid',
-              hidden_activation='sigmoid',
+              hidden_activation='relu',
               optimizer='adam',
               loss='binary_crossentropy',
               metrics=['binary_accuracy'],
-              penalty='l1',
+              penalty=None,
               dropout_ratio=0.2,
               **kwargs):
     '''build function to return densely connected network
@@ -38,11 +38,14 @@ def bfn_dense(dense_layer=(1, ),
         The ith element represents the number of neurons in the ith hidden layer
     dropout: boolean tuple
         true of the ith element represents ith layer is connected with dropout layer
+    {input_shape}
+    
     out_activation:
         Activation function for the ouput layer
+        
     hidden_activation:
-        Activation function for the hidden layer
-    {input_shape}
+        Activation function for the hidden layer  
+        
     {optimizer}
     {loss}
     {metrics}   
