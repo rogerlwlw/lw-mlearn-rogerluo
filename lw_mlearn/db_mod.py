@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
-"""db_mod
-
-Description
-----
+"""
 @author: roger
-
-Contain calss
 ----
 1) SQL_engine(): class, to connect data base engine
 
