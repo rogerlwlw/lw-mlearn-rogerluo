@@ -3,9 +3,6 @@
 
 Description
 ----
-Get data base engine and manipulates data within data base
-mysql+pymysql://suyu.zhao:Zhaosuyu630!@119.254.115.72:3307/fri
-oracle+cx_oracle://wen_luo_pohoocredit:AB459300@10.30.4.26:1521/odsdb
 @author: roger
 
 Contain calss
