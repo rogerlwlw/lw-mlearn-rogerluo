@@ -120,7 +120,7 @@ dist/
 build/
 *.egg-info
 tests/
-
+study_examples/
 
 
 
