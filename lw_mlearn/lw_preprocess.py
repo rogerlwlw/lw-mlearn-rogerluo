@@ -102,7 +102,9 @@ def pipe_main(pipe=None):
     '''
     clean = {
         'clean': Split_cls(dtype_filter='not_datetime', na1='null', na2=-999),
-        'cleanNA': Split_cls(dtype_filter='not_datetime', na1=None, na2=None)
+        'cleanNA': Split_cls(dtype_filter='not_datetime', na1=None, na2=None),
+        'cleanMean': Split_cls(dtype_filter='not_datetime', na1='most_frequent',
+                              na2='mean'),
     }
     #
     encode = {
