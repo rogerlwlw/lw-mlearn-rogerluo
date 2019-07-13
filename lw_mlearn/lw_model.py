@@ -34,7 +34,7 @@ from .utilis import get_flat_list, get_kwargs
 from .plotter import (plotter_auc, plotter_cv_results_, plotter_score_path)
 from .read_write import Objs_management
 from .lw_preprocess import (pipe_main, pipe_grid, _binning, re_fearturename,
-                            plotter_lift_curve)
+                            plotter_lift_curve, get_custom_scorer)
 
 
 class ML_model(BaseEstimator):
@@ -58,7 +58,7 @@ class ML_model(BaseEstimator):
     gridcv_results
         - cv_results after running grid_searchcv
     folder
-        - read_write object to load/dump datafiles from self.folder.path_
+        - read_write object to load/dump datafiles from self.path
     estimator.bins
         - bin edges of predictions of estimator
     
@@ -172,7 +172,24 @@ class ML_model(BaseEstimator):
                 "file with '{}' suffix not found in 'data' folder... \n".
                 format(suffix))
         return gen
-
+    
+    def _get_scorer(self, scoring):
+        ''' return sklearn scorer
+        '''
+        scorer = {}
+        sk_scoring = []
+        custom_scorer = get_custom_scorer()
+        for i in get_flat_list(scoring):
+            if i in custom_scorer:
+                scorer.update({i : custom_scorer[i]})
+            else:
+                sk_scoring.append(i)
+        if len(sk_scoring) > 0:
+            s, _ = _validation._check_multimetric_scoring(self.estimator, 
+                                                          scoring=sk_scoring)
+            scorer.update(s)
+        return scorer
+    
     @property
     def folder(self):
         return Objs_management(self.path)
@@ -489,9 +506,11 @@ class ML_model(BaseEstimator):
         '''
         # test scores
         data_splits = _split_cv(X, y=y, cv=cv, random_state=self.seed)
-        get_scorers = _validation._check_multimetric_scoring
-        scorer, _ = get_scorers(self.estimator, scoring=scoring)
-        is_multimetric = not callable(scorer)
+        # get_scorers = _validation._check_multimetric_scoring
+        # scorer, _ = get_scorers(self.estimator, scoring=scoring)
+        # is_multimetric = not callable(scorer)
+        scorer = self._get_scorer(scoring)
+        is_multimetric = not callable(scorer)   
         scores = []
         for item in data_splits:
             x0 = item[0][1]
@@ -911,7 +930,12 @@ def train_models(estimator,
 
 
 def model_experiments(X=None, y=None, cv=3, scoring='roc_auc'):
-    ''' experiment on different piplines of chained estimators
+    ''' experiment on different piplines
+    
+    return
+    ----
+    dataframe 
+        - cv scores of each pipeline
     '''
     l = [
         'clean_oht_LDA_fxgb_cleanNN_AdaBoostClassifier',
@@ -1032,3 +1056,5 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_test
     if ret_type == 'train':
         return data_splits_train
+    
+
