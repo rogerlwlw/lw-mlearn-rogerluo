@@ -36,6 +36,7 @@ from sklearn.decomposition import (
     TruncatedSVD, LatentDirichletAllocation)
 
 from sklearn.metrics import roc_curve
+from sklearn.metrics import make_scorer
 from sklearn.impute import SimpleImputer
 from sklearn.utils import validation
 from sklearn.utils.testing import all_estimators
@@ -207,17 +208,17 @@ def pipe_main(pipe=None):
         'frf':
         SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5)),
         'fRFExgb':
-        RFE(XGBClassifier(n_jobs=-1), step=0.1, n_features_to_select=15),
+        RFE(XGBClassifier(n_jobs=-1), step=0.1, n_features_to_select=20),
         'fRFErf':
         RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5),
-            step=0.1,
-            n_features_to_select=15),
+            step=0.3,
+            n_features_to_select=20),
         'fRFElog':
         RFE(LogisticRegressionCV(penalty='l1',
                                  solver='saga',
                                  scoring='roc_auc'),
-            step=0.1,
-            n_features_to_select=15)
+            step=0.3,
+            n_features_to_select=20)
     }
     # Univariate feature selection
     feature_u = {
@@ -1399,13 +1400,30 @@ class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
         return rst
 
 
-def ks_score(y_true, y_pred, pos_label=None):
-    '''return K-S score of preditions
-    '''
-    fpr, tpr, _ = roc_curve(y_true, y_pred, pos_label=None)
-    ks = (tpr - fpr).max()
-    return ks
-
+#def re_fearturename(estimator):
+#    '''return featurenames of an estimator wrapped in a pipeline
+#    '''
+#    if isinstance(estimator, Pipeline):
+#        fn = None
+#        su = None
+#        steps = estimator.steps
+#        n = len(steps) - 1
+#        while n > -1:
+#            n -= 1
+#            tr = steps[n][1]
+#            if hasattr(tr, 'get_feature_names'):
+#                fn = tr.get_feature_names()
+#                if fn is not None: break
+#            if hasattr(tr, 'get_support'):
+#                su = tr.get_support()
+#
+#        if fn is None:
+#            print('estimator has no feature_names attribute')
+#            return
+#        if su is not None:
+#            fn = pd.Series(fn)[su]
+#
+#    return fn
 
 def re_fearturename(estimator):
     '''return featurenames of an estimator wrapped in a pipeline
@@ -1414,22 +1432,20 @@ def re_fearturename(estimator):
         fn = None
         su = None
         steps = estimator.steps
-        n = len(steps) - 1
-        while n > -1:
-            n -= 1
-            tr = steps[n][1]
+        n = len(steps)
+        i = 0
+        while i < n :
+            tr = steps[i][1]
             if hasattr(tr, 'get_feature_names'):
-                fn = tr.get_feature_names()
-                if fn is not None: break
+                fn = pd.Series(tr.get_feature_names())
             if hasattr(tr, 'get_support'):
                 su = tr.get_support()
+                fn = fn[su]
+            i += 1
 
         if fn is None:
             print('estimator has no feature_names attribute')
             return
-        if su is not None:
-            fn = pd.Series(fn)[su]
-
     return fn
 
 
@@ -1511,7 +1527,7 @@ def plotter_lift_curve(y_pre,
 def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02,
                         up=0.5):
     '''plot event rate for given woe_iv Dataframe
-    see woe_encoder
+    see woe_encoder attribute woe_iv
     '''
     n = 0
     for keys, gb in woe_iv.groupby('FEATURE_NAME'):
@@ -1528,3 +1544,39 @@ def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02,
             plt.close()
 
     return
+
+def ks_score(y_true, y_pred, pos_label=1):
+    '''return K-S score of preditions
+    '''
+    fpr, tpr, _ = roc_curve(y_true, y_pred, pos_label=pos_label)
+    ks = (tpr - fpr).max()
+    return ks
+
+def psi_score(act, ex):
+    '''return psi score
+    
+    act:
+        array of actual ratios
+    ex:
+        array of expected ratios
+        
+    return
+    ----
+    psi score
+    '''
+    act = np.array(act)
+    ex = np.array(ex)
+    ex = np.where(ex==0, 0.0001, ex)
+    if len(act) != len(ex):
+        raise ValueError("length of 'act' and 'ex' must match")   
+    delta = act - ex
+    ln = np.log(act/ex)
+    return np.sum(delta*ln)
+
+def get_custom_scorer():
+    ''' return custom scorer dict
+    '''
+    scorer_dict = {}
+    scorer_dict['KS'] = make_scorer(ks_score, needs_threshold=True)   
+    
+    return scorer_dict
