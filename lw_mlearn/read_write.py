@@ -137,7 +137,7 @@ class Reader():
             print(repr(e), '\n')
 
     def read_all(self, suffix=None, path=None, subfolder=False, **kwargs):
-        '''return generator of read in objs, and obj that collects them 
+        '''return list of read in objs, and obj that collects them 
         as attributes
         
         suffix: file suffix to read
