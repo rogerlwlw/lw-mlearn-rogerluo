@@ -59,7 +59,7 @@ class ML_model(BaseEstimator):
         - cv_results after running grid_searchcv
     folder
         - read_write object to load/dump datafiles from self.path
-    estimator.bins
+    bins
         - bin edges of predictions of estimator
     
     method
@@ -172,7 +172,7 @@ class ML_model(BaseEstimator):
                 "file with '{}' suffix not found in 'data' folder... \n".
                 format(suffix))
         return gen
-    
+
     def _get_scorer(self, scoring):
         ''' return sklearn scorer
         '''
@@ -181,15 +181,15 @@ class ML_model(BaseEstimator):
         custom_scorer = get_custom_scorer()
         for i in get_flat_list(scoring):
             if i in custom_scorer:
-                scorer.update({i : custom_scorer[i]})
+                scorer.update({i: custom_scorer[i]})
             else:
                 sk_scoring.append(i)
         if len(sk_scoring) > 0:
-            s, _ = _validation._check_multimetric_scoring(self.estimator, 
+            s, _ = _validation._check_multimetric_scoring(self.estimator,
                                                           scoring=sk_scoring)
             scorer.update(s)
         return scorer
-    
+
     @property
     def folder(self):
         return Objs_management(self.path)
@@ -473,10 +473,13 @@ class ML_model(BaseEstimator):
         return cross validated score of estimator (see cross_val_score)
         ---------
         '''
-        L = locals().copy()
-        L.pop('self')
+        scorer = self._get_scorer(scoring)
         return cross_val_score(self.estimator,
-                               **get_kwargs(cross_validate, **L, **kwargs))
+                               X=X,
+                               y=y,
+                               scoring=scorer,
+                               cv=cv,
+                               **get_kwargs(cross_val_score, **kwargs))
 
     @wraps(cross_validate)
     def cv_validate(self,
@@ -497,8 +500,12 @@ class ML_model(BaseEstimator):
         estimator = self.estimator
         L = locals().copy()
         L.pop('self')
-        cv_results = cross_validate(
-            **get_kwargs(cross_validate, **L, **kwargs))
+        L.pop('scoring')
+        scorer = self._get_scorer(scoring)
+        # --
+        cv_results = cross_validate(scoring=scorer,
+                                    **get_kwargs(cross_validate, **L,
+                                                 **kwargs))
         return pd.DataFrame(cv_results)
 
     def test_score(self, X, y, cv, scoring):
@@ -510,7 +517,7 @@ class ML_model(BaseEstimator):
         # scorer, _ = get_scorers(self.estimator, scoring=scoring)
         # is_multimetric = not callable(scorer)
         scorer = self._get_scorer(scoring)
-        is_multimetric = not callable(scorer)   
+        is_multimetric = not callable(scorer)
         scores = []
         for item in data_splits:
             x0 = item[0][1]
@@ -530,11 +537,11 @@ class ML_model(BaseEstimator):
                       cv=3,
                       refit='roc_auc',
                       return_train_score=True,
-                      n_jobs=1,
+                      n_jobs=2,
                       fit_params={},
                       **kwargs):
         '''tune hyper parameters of estimator by searching param_grid
-        , update self estimator & grid search results
+        , update self.estimator & self.gridcv_results
         
         return
         -----
@@ -543,9 +550,13 @@ class ML_model(BaseEstimator):
         L = locals().copy()
         L.pop('self')
         L.pop('fit_params')
+        L.pop('scoring')
+        scorer = self._get_scorer(scoring)
         # --
         estimator = self.estimator
-        grid = GridSearchCV(estimator, **get_kwargs(GridSearchCV, **L),
+        grid = GridSearchCV(estimator,
+                            scoring=scorer,
+                            **get_kwargs(GridSearchCV, **L),
                             **kwargs)
 
         grid.fit(X, y, **fit_params)
@@ -623,7 +634,7 @@ class ML_model(BaseEstimator):
     def run_train(self,
                   train_set=None,
                   title='Train',
-                  scoring=['roc_auc', 'average_precision'],
+                  scoring=['roc_auc', 'KS'],
                   q=None,
                   bins=None,
                   max_leaf_nodes=None,
@@ -688,7 +699,7 @@ class ML_model(BaseEstimator):
                  title=None,
                  use_self_bins=True,
                  cv=3,
-                 scoring=['roc_auc', 'average_precision'],
+                 scoring=['roc_auc', 'KS', 'average_precision'],
                  save_fig=True,
                  **kwargs):
         '''
@@ -772,9 +783,9 @@ class ML_model(BaseEstimator):
                         title=None,
                         param_grid=-1,
                         refit='roc_auc',
-                        scoring=['roc_auc', 'average_precision'],
+                        scoring=['roc_auc', 'KS'],
                         fit_params={},
-                        n_jobs=1,
+                        n_jobs=2,
                         save_fig=True,
                         **kwargs):
         '''
@@ -844,9 +855,9 @@ class ML_model(BaseEstimator):
                      max_leaf_nodes=None,
                      q=None,
                      bins=None,
-                     cv=3,
+                     cv=5,
                      grid_search=False,
-                     scoring=['roc_auc', 'average_precision'],
+                     scoring=['roc_auc', 'KS'],
                      **kwargs):
         '''
         - run self.run_sensitivity(if grid_search=True)
@@ -929,7 +940,11 @@ def train_models(estimator,
     return model
 
 
-def model_experiments(X=None, y=None, cv=3, scoring='roc_auc'):
+def model_experiments(X=None,
+                      y=None,
+                      cv=3,
+                      scoring=['roc_auc', 'KS'],
+                      estimator_lis=None):
     ''' experiment on different piplines
     
     return
@@ -937,22 +952,31 @@ def model_experiments(X=None, y=None, cv=3, scoring='roc_auc'):
     dataframe 
         - cv scores of each pipeline
     '''
-    l = [
-        'clean_oht_LDA_fxgb_cleanNN_AdaBoostClassifier',
-        'clean_oht_fxgb_RUSBoostClassifier',
-        'clean_oht_fRFElog_cleanNN_stdscale_GaussianProcessClassifier',
-        'clean_oht_fRFErf_cleanNN_stdscale_GaussianProcessClassifier',
-        'clean_oht_fRFErf_cleanNN_stdscale_SVC',
-        'clean_oht_fxgb_cleanNN_XGBClassifier',
-        'clean_oht_fxgb_oside_XGBClassifier',
-        'clean_oht_frf_oside_XGBClassifier',
-        'clean_oht_fxgb_cleanNN_RandomForestClassifier',
-        'clean_oht_frf_RandomForestClassifier',
-        'clean_oht_fxgb_BalancedRandomForestClassifier',
-        'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
-        'clean_oht_fRFElog_cleanNN_GradientBoostingClassifier',
-        'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
-    ]
+    if estimator_lis is None:
+        l = [
+            'cleanNA_woe_frf_LogisticRegression',
+            'cleanNA_woe_frf20_LogisticRegression',
+            'cleanNA_woe_cleanNN_fRFErf_LogisticRegression',
+            'cleanNA_woe_frf10_LogisticRegression',
+            # default SVM grid search log/hinge/huber/perceptron
+            'cleanMean_woe_frf20_Nys_SGDClassifier',
+            'cleanMean_woe_frf20_rbf_SGDClassifier',
+            'cleanMean_oht_stdscale_frf20_Nys_SGDClassifier',
+            'clean_oht_XGBClassifier',
+            'clean_oht_oside_frf_XGBClassifier',
+            'clean_oht_cleanNN_fxgb_XGBClassifier',
+            'clean_oht_cleanNN_inlierForest_fxgb_XGBClassifier',
+            'clean_oht_frf_RandomForestClassifier',
+            'clean_oht_fxgb_BalancedRandomForestClassifier',
+            'clean_oht_cleanNN_frf_AdaBoostClassifier',
+            'clean_oht_fxgb_RUSBoostClassifier',
+            'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
+            'clean_oht_fsvm_cleanNN_GradientBoostingClassifier',
+            'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
+        ]
+    else:
+        l = estimator_lis
+
     if X is None:
         return set(l)
     else:
@@ -1056,5 +1080,3 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_test
     if ret_type == 'train':
         return data_splits_train
-    
-
