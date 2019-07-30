@@ -157,4 +157,3 @@ class SQL_engine():
             if "int" in str(j):
                 dtypedict.update({i: Integer()})
         return dtypedict
-
