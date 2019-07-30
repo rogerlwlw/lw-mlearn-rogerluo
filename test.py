@@ -18,7 +18,7 @@ def test_model():
             'cleanNA_woe_frf20_LogisticRegression',
             'cleanNA_woe_cleanNN_fRFErf_LogisticRegression',
             'cleanNA_woe_frf10_LogisticRegression',
-            'cleanMean_woe_frf20_Nys100_SGDClassifier',
+            'cleanMean_woe_frf20_Nys_SGDClassifier',
             'cleanMean_oht_stdscale_frf20_Nys_SGDClassifier',
             'clean_oht_XGBClassifier',
             'clean_oht_oside_frf_XGBClassifier',
