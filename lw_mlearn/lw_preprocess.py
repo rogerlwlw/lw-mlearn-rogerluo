@@ -21,7 +21,8 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.svm import LinearSVC, SVC
-from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
+from sklearn.linear_model import (SGDClassifier, LogisticRegression, 
+                                  LogisticRegressionCV)
 from sklearn.feature_selection import (SelectFromModel,
                                        GenericUnivariateSelect, chi2,
                                        f_classif, mutual_info_classif, RFE)
@@ -34,6 +35,8 @@ from sklearn.decomposition import (
     SparsePCA, dict_learning, dict_learning_online, fastica,
     non_negative_factorization, randomized_svd, sparse_encode, FactorAnalysis,
     TruncatedSVD, LatentDirichletAllocation)
+
+from sklearn.kernel_approximation import RBFSampler, Nystroem
 
 from sklearn.metrics import roc_curve
 from sklearn.metrics import make_scorer
@@ -82,6 +85,22 @@ from .read_write import Path
 from .plotter import plt, plotter_rateVol
 
 
+def index_duplicated(string_list):
+    '''index duplicated item in a list to make an unique list
+    '''
+    d = pd.Series(string_list).duplicated(False)
+    n = 0
+    new_list = []
+    for i, j in zip(string_list, d):
+        if j:
+            new_list .append(str(n) + i)
+        else:
+            new_list.append(i)
+        n += 1
+    return new_list
+        
+    
+    
 def pipe_main(pipe=None):
     '''pipeline construction using sklearn estimators, final step support only
     classifiers currently
@@ -102,14 +121,21 @@ def pipe_main(pipe=None):
         2) if pipe is None, a dict indicating possible choice of 'steps'
     '''
     clean = {
-        'clean': Split_cls(dtype_filter='not_datetime', na1='null', na2=-999),
-        'cleanNA': Split_cls(dtype_filter='not_datetime', na1=None, na2=None),
-        'cleanMean': Split_cls(dtype_filter='not_datetime', na1='most_frequent',
-                              na2='mean'),
+        'clean':
+        Split_cls(dtype_filter='not_datetime', na1='null', na2=-999),
+        'cleanNA':
+        Split_cls(dtype_filter='not_datetime', na1=None, na2=None),
+        'cleanMean':
+        Split_cls(dtype_filter='not_datetime', na1='most_frequent',
+                  na2='mean'),
+        'cleanMn':
+        Split_cls(dtype_filter='not_datetime', na1='missing', na2='mean'),
     }
     #
     encode = {
-        'woe': Woe_encoder(max_leaf_nodes=5),
+        'woe': Woe_encoder(max_leaf_nodes=8),
+        'woeq5' : Woe_encoder(q=5),
+        'woeb5' : Woe_encoder(bins=5),
         'oht': Oht_encoder(),
         'ordi': Ordi_encoder(),
     }
@@ -181,11 +207,13 @@ def pipe_main(pipe=None):
     }
     # feature construction
     feature_c = {
-        'pca': PCA(whiten=True),
+        'pca':  PCA(whiten=True),
         'spca': SparsePCA(normalize_components=True, n_jobs=-1),
         'ipca': IncrementalPCA(whiten=True),
         'kpca': KernelPCA(kernel='rbf', n_jobs=-1),
         'poly': PolynomialFeatures(degree=2),
+        'rbf' : RBFSampler(random_state=0),
+        'Nys' : Nystroem(random_state=0),
         'rtembedding': RandomTreesEmbedding(n_estimators=10),
         'LDA': LinearDiscriminantAnalysis(),
         'QDA': QuadraticDiscriminantAnalysis(),
@@ -193,12 +221,10 @@ def pipe_main(pipe=None):
     # select from model
     feature_m = {
         'fwoe':
-        SelectFromModel(Woe_encoder(max_leaf_nodes=5)),
+        SelectFromModel(Woe_encoder(max_leaf_nodes=8)),
         'flog':
-        SelectFromModel(
-            LogisticRegressionCV(penalty='l1',
-                                 solver='saga',
-                                 scoring='roc_auc')),
+        SelectFromModel(LogisticRegression(penalty='l1', solver='saga',
+                                           C=1e-2)),
         'fsgd':
         SelectFromModel(SGDClassifier(penalty="l1")),
         'fsvm':
@@ -207,18 +233,30 @@ def pipe_main(pipe=None):
         SelectFromModel(XGBClassifier(n_jobs=-1)),
         'frf':
         SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5)),
+
+        # fixed number of features
+        'fxgb20':
+        SelectFromModel(XGBClassifier(n_jobs=-1), max_features=20),
+        'frf20':
+        SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5),
+                        max_features=20),
+        'frf10':
+        SelectFromModel(ExtraTreesClassifier(n_estimators=100, max_depth=5),
+                        max_features=10),
+        'flog20':
+        SelectFromModel(LogisticRegression(penalty='l1', solver='saga',
+                                           C=1e-2),
+                        max_features=20),
         'fRFExgb':
-        RFE(XGBClassifier(n_jobs=-1), step=0.1, n_features_to_select=20),
+        RFE(XGBClassifier(n_jobs=-1), step=0.3, n_features_to_select=15),
         'fRFErf':
         RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5),
             step=0.3,
-            n_features_to_select=20),
+            n_features_to_select=15),
         'fRFElog':
-        RFE(LogisticRegressionCV(penalty='l1',
-                                 solver='saga',
-                                 scoring='roc_auc'),
+        RFE(LogisticRegression(penalty='l1', solver='saga', C=1e-2),
             step=0.3,
-            n_features_to_select=20)
+            n_features_to_select=15)
     }
     # Univariate feature selection
     feature_u = {
@@ -245,7 +283,7 @@ def pipe_main(pipe=None):
         EasyEnsembleClassifier=EasyEnsembleClassifier(),
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(),
         RUSBoostClassifier=RUSBoostClassifier(),
-        SVC=SVC(C=0.01, gamma='auto'))
+        SVC=SVC(C=0.1, gamma='auto'))
 
     if pipe is None:
         feature_s = {}
@@ -265,9 +303,9 @@ def pipe_main(pipe=None):
         all_keys_dict.update(**clean, **encode, **scale, **feature_c,
                              **feature_m, **feature_u, **estimator, **resample)
         steps = []
-        for i in l:
+        for i, j in zip(l, index_duplicated(l)):
             if all_keys_dict.get(i) is not None:
-                steps.append((i, all_keys_dict.get(i)))
+                steps.append((j, all_keys_dict.get(i)))
             else:
                 raise KeyError(
                     "'{}' invalid key for sklearn estimators".format(i))
@@ -312,6 +350,26 @@ def _param_grid(estimator):
         param_grid dict
     '''
 
+    LogisticRegression = [{'C': np.logspace(-2, 0, 5)}]
+
+    SGDClassifier = [
+        {
+            'loss': [ 'log', 'hinge', 'modified_huber', 'perceptron']
+        },
+        {
+            'penalty': [ 'l1', 'l2','elasticnet'],
+            'alpha' : np.logspace(-5, 0, 3)
+        },
+    ]
+    
+    SVC = [{
+        'kernel': ['linear', 'rbf', 'sigmoid', 'poly'],
+    }, {
+        'gamma': np.logspace(-5, 5, 5),
+    }, {
+        'C': np.logspace(-5, 1, 5)
+    }]
+    
     XGBClassifier = [
         {
             'learning_rate': np.logspace(-3, 0, 5),
@@ -345,14 +403,6 @@ def _param_grid(estimator):
         },
     ]
 
-    SVC = [{
-        'kernel': ['rbf', 'sigmoid', 'poly'],
-    }, {
-        'gamma': np.logspace(-5, 5, 5),
-    }, {
-        'C': np.logspace(-5, 1, 5)
-    }]
-
     RandomForestClassifier = [
         {
             'max_depth': range(3, 10),
@@ -385,20 +435,6 @@ def _param_grid(estimator):
         'min_impurity_decrease': [1e-3],
     }]
 
-    SGDClassifier = [
-        {
-            'loss': ['hinge', 'log', 'perceptron']
-        },
-        {
-            'penalty': ['l2', 'l1', 'elasticnet'],
-            'alpha': np.logspace(-5, -1, 5)
-        },
-        {
-            'learning_rate': ['adaptive', 'optimal', 'constant'],
-            'eta0': [0.01]
-        },
-    ]
-
     LabelPropagation = [
         {
             'kernel': ['rbf'],
@@ -422,6 +458,15 @@ def _param_grid(estimator):
         'n_components': np.logspace(1.2, 2, 5).astype(int)
     }, {
         'alpha': np.logspace(-1, 3, 5)
+    }]
+    
+    Nys = [
+            {'kernel' : ['linear','rbf', 'polynomial', 'sigmoid']}, 
+            {'gamma' :np.logspace(-5, 1, 8)}
+    ]
+    
+    rbf = [{
+            'gamma' : np.logspace(-5, 1, 8),
     }]
 
     param_grids = locals().copy()
@@ -560,7 +605,8 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
     '''
     - clean(convert to numeric/str & drop na or uid columns); 
     - filter columns of specific dtypes; 
-    - store input & output columns; drop all na/constant/UID columns 
+    - store input & output columns; 
+    - drop all na/constant/UID columns 
     
     params
     ---- 
@@ -575,13 +621,16 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         - fill na strategy for categorical data column , default None
     na2
         - fill na stategy for numeric data column, default None
+    na_thresh
+        - int or float(0.0-1.0) thresh number of null values to drop column
     '''
 
     def __init__(self,
                  dtype_filter='not_datetime',
                  verbose=0,
                  na1=None,
-                 na2=None):
+                 na2=None,
+                 na_thresh=1):
         ''' 
         '''
         L = locals().copy()
@@ -595,7 +644,13 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
 
         # drop na columns
         na_col = X.columns[X.apply(lambda x: all(x.isna()))]
-        X.dropna(axis=1, how='all', inplace=True)
+        length = len(X)
+        if api.is_integer(self.na_thresh):
+            thresh = self.na_thresh
+        if api.is_float(self.na_thresh):
+            thresh = length * self.na_thresh
+
+        X.dropna(axis=1, how='any', thresh=thresh, inplace=True)
 
         # drop uid cols or too discrete data
         uid_col = []
@@ -856,10 +911,10 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         '''
         if hasattr(self, 'feature_iv'):
 
-            print('''IV >0.5 or IV < 0.02 has been forced to 0 due to
-                  meaningless value''')
+            print('''IV < 0.02 has been forced to 0 due to
+                  low predictive power  value''')
             value = self.feature_iv
-            iv = self.feature_iv.where((0.02 < value) & (value < 0.5))
+            iv = self.feature_iv.where(0.02 < value)
             return iv
         else:
             return
@@ -1425,6 +1480,7 @@ class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
 #
 #    return fn
 
+
 def re_fearturename(estimator):
     '''return featurenames of an estimator wrapped in a pipeline
     '''
@@ -1434,7 +1490,7 @@ def re_fearturename(estimator):
         steps = estimator.steps
         n = len(steps)
         i = 0
-        while i < n :
+        while i < n:
             tr = steps[i][1]
             if hasattr(tr, 'get_feature_names'):
                 fn = pd.Series(tr.get_feature_names())
@@ -1525,7 +1581,7 @@ def plotter_lift_curve(y_pre,
 
 
 def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02,
-                        up=0.5):
+                        up=1.0):
     '''plot event rate for given woe_iv Dataframe
     see woe_encoder attribute woe_iv
     '''
@@ -1545,12 +1601,14 @@ def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02,
 
     return
 
+
 def ks_score(y_true, y_pred, pos_label=1):
     '''return K-S score of preditions
     '''
     fpr, tpr, _ = roc_curve(y_true, y_pred, pos_label=pos_label)
     ks = (tpr - fpr).max()
     return ks
+
 
 def psi_score(act, ex):
     '''return psi score
@@ -1566,17 +1624,18 @@ def psi_score(act, ex):
     '''
     act = np.array(act)
     ex = np.array(ex)
-    ex = np.where(ex==0, 0.0001, ex)
+    ex = np.where(ex == 0, 0.0001, ex)
     if len(act) != len(ex):
-        raise ValueError("length of 'act' and 'ex' must match")   
+        raise ValueError("length of 'act' and 'ex' must match")
     delta = act - ex
-    ln = np.log(act/ex)
-    return np.sum(delta*ln)
+    ln = np.log(act / ex)
+    return np.sum(delta * ln)
+
 
 def get_custom_scorer():
     ''' return custom scorer dict
     '''
     scorer_dict = {}
-    scorer_dict['KS'] = make_scorer(ks_score, needs_threshold=True)   
-    
+    scorer_dict['KS'] = make_scorer(ks_score, needs_threshold=True)
+
     return scorer_dict
