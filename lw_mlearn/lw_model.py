@@ -24,6 +24,7 @@ from sklearn.model_selection import (GridSearchCV, RandomizedSearchCV,
                                      cross_val_score, cross_validate)
 from sklearn.model_selection import _validation
 from sklearn.metrics import roc_curve, auc
+from sklearn.datasets import make_classification
 
 from imblearn.pipeline import Pipeline
 
@@ -953,27 +954,7 @@ def model_experiments(X=None,
         - cv scores of each pipeline
     '''
     if estimator_lis is None:
-        l = [
-            'cleanNA_woe_frf_LogisticRegression',
-            'cleanNA_woe_frf20_LogisticRegression',
-            'cleanNA_woe_cleanNN_fRFErf_LogisticRegression',
-            'cleanNA_woe_frf10_LogisticRegression',
-            # default SVM grid search log/hinge/huber/perceptron
-            'cleanMean_woe_frf20_Nys_SGDClassifier',
-            'cleanMean_woe_frf20_rbf_SGDClassifier',
-            'cleanMean_oht_stdscale_frf20_Nys_SGDClassifier',
-            'clean_oht_XGBClassifier',
-            'clean_oht_oside_frf_XGBClassifier',
-            'clean_oht_cleanNN_fxgb_XGBClassifier',
-            'clean_oht_cleanNN_inlierForest_fxgb_XGBClassifier',
-            'clean_oht_frf_RandomForestClassifier',
-            'clean_oht_fxgb_BalancedRandomForestClassifier',
-            'clean_oht_cleanNN_frf_AdaBoostClassifier',
-            'clean_oht_fxgb_RUSBoostClassifier',
-            'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
-            'clean_oht_fsvm_cleanNN_GradientBoostingClassifier',
-            'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
-        ]
+        l = get_default_estimators()
     else:
         l = estimator_lis
 
@@ -1080,3 +1061,50 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_test
     if ret_type == 'train':
         return data_splits_train
+
+def _test(delete=False):
+    '''run test of ML_model class methods through train_models functions
+    '''
+    # --
+    if not os.path.exists('tests_train_models'):
+        os.makedirs('tests', exist_ok=True)
+    os.chdir('tests')    
+    X, y = make_classification(300, n_redundant=5, n_features=50)
+    l = get_default_estimators()   
+    for i in l:
+        train_models(i, (X, y), (X, y),
+                     max_leaf_nodes=10, scoring=['KS', 'roc_auc'])
+    if delete: 
+        rmtree('tests')
+ 
+    return
+    
+def get_default_estimators():
+    '''return default list of estimators
+    '''
+    estimators = [
+        # linear models
+        'cleanNA_woe_LogisticRegression',
+        'cleanNA_woe_frf_LogisticRegression',
+        'cleanNA_woe_cleanNN_frf_LogisticRegression',
+        'cleanNA_woe_frf20_LogisticRegression',
+        'cleanNA_woe_cleanNN_fRFE10log_LogisticRegression',
+        'cleanNA_woeq8_cleanNN_frf10_LogisticRegression',
+        # default SVM, grid search log/hinge/huber/perceptron
+        'cleanMean_woe_frf20_Nys_SGDClassifier',
+        'cleanMean_woe_frf20_Nys_cleanNN_SGDClassifier',
+        'cleanMean_oht_stdscale_frf20_Nys_SGDClassifier',
+        # tree based models
+        'clean_oht_XGBClassifier',
+        'clean_oht_cleanNN_fxgb_XGBClassifier',
+        'clean_oht_cleanNN_inlierForest_fxgb_XGBClassifier',
+        'clean_oht_frf_RandomForestClassifier',
+        'clean_oht_cleanNN_RandomForestClassifier',
+        'clean_oht_fxgb_BalancedRandomForestClassifier',
+        'clean_oht_cleanNN_frf_AdaBoostClassifier',
+        'clean_oht_fxgb_RUSBoostClassifier',
+        'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
+        'clean_oht_fsvm_cleanNN_GradientBoostingClassifier',
+        'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
+    ]  
+    return estimators
