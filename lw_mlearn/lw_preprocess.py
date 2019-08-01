@@ -134,7 +134,7 @@ def pipe_main(pipe=None):
     #
     encode = {
         'woe': Woe_encoder(max_leaf_nodes=8),
-        'woeq5' : Woe_encoder(q=5),
+        'woeq8' : Woe_encoder(q=8),
         'woeb5' : Woe_encoder(bins=5),
         'oht': Oht_encoder(),
         'ordi': Ordi_encoder(),
@@ -247,16 +247,18 @@ def pipe_main(pipe=None):
         SelectFromModel(LogisticRegression(penalty='l1', solver='saga',
                                            C=1e-2),
                         max_features=20),
-        'fRFExgb':
-        RFE(XGBClassifier(n_jobs=-1), step=0.3, n_features_to_select=15),
-        'fRFErf':
-        RFE(ExtraTreesClassifier(n_estimators=100, max_depth=5),
-            step=0.3,
-            n_features_to_select=15),
-        'fRFElog':
+        'fRFE30log':
         RFE(LogisticRegression(penalty='l1', solver='saga', C=1e-2),
             step=0.3,
-            n_features_to_select=15)
+            n_features_to_select=30),
+        'fRFE20log':
+        RFE(LogisticRegression(penalty='l1', solver='saga', C=1e-2),
+            step=0.3,
+            n_features_to_select=20),
+        'fRFE10log':
+        RFE(LogisticRegression(penalty='l1', solver='saga', C=1e-2),
+            step=0.3,
+            n_features_to_select=10)
     }
     # Univariate feature selection
     feature_u = {
@@ -354,7 +356,7 @@ def _param_grid(estimator):
 
     SGDClassifier = [
         {
-            'loss': [ 'log', 'hinge', 'modified_huber', 'perceptron']
+            'loss': [ 'log', 'hinge', 'perceptron', 'modified_huber']
         },
         {
             'penalty': [ 'l1', 'l2','elasticnet'],
@@ -458,11 +460,11 @@ def _param_grid(estimator):
         'n_components': np.logspace(1.2, 2, 5).astype(int)
     }, {
         'alpha': np.logspace(-1, 3, 5)
-    }]
+    }]  
     
     Nys = [
-            {'kernel' : ['linear','rbf', 'polynomial', 'sigmoid']}, 
-            {'gamma' :np.logspace(-5, 1, 8)}
+            {'kernel' : ['linear', 'polynomial', 'sigmoid', 'rbf'],
+             'gamma' : np.logspace(-5, 1, 5)}, 
     ]
     
     rbf = [{
