@@ -121,6 +121,7 @@ build/
 *.egg-info
 tests/
 study_examples/
+pre_defined_models/
 
 
 
