@@ -1483,7 +1483,7 @@ class Ordi_encoder(BaseEstimator, TransformerMixin, Base_clean):
 #    return fn
 
 
-def re_fearturename(estimator):
+def selected_fearturename(estimator):
     '''return featurenames of an estimator wrapped in a pipeline
     '''
     if isinstance(estimator, Pipeline):
