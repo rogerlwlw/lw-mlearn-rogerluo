@@ -24,17 +24,14 @@ from sklearn.model_selection import (GridSearchCV, RandomizedSearchCV,
                                      cross_val_score, cross_validate)
 from sklearn.model_selection import _validation
 from sklearn.metrics import roc_curve, auc
-from sklearn.datasets import make_classification
-
-from imblearn.pipeline import Pipeline
-
 from functools import wraps
 from shutil import rmtree
 
 from .utilis import get_flat_list, get_kwargs
 from .plotter import (plotter_auc, plotter_cv_results_, plotter_score_path)
 from .read_write import Objs_management
-from .lw_preprocess import (pipe_main, pipe_grid, _binning, re_fearturename,
+from .lw_preprocess import (pipe_main, pipe_grid, _binning, 
+                            selected_fearturename,
                             plotter_lift_curve, get_custom_scorer)
 
 
@@ -87,7 +84,7 @@ class ML_model(BaseEstimator):
     plot_gridcv:
         plot  grid seach cv results of model
     '''
-
+    @staticmethod
     def from_config(config):
         ''' return ML_model instance from saved configuration parameters
         '''
@@ -622,7 +619,7 @@ class ML_model(BaseEstimator):
         pre_func = getattr(estimator, pre_method)
         if pre_func is None:
             print('{} has no {} method'.format(
-                _get_estimator_name(estimator, pre_method)))
+                _get_estimator_name(estimator), pre_method))
         y_pre = pre_func(X, **kwargs)
         if np.ndim(y_pre) > 1:
             y_pre = y_pre[:, pos_label]
@@ -827,7 +824,7 @@ class ML_model(BaseEstimator):
             return
 
         # memory cache
-        if isinstance(self.estimator, Pipeline):
+        if hasattr(self.estimator, 'memory'):
             self.estimator.memory = os.path.relpath(
                 os.path.join(self.folder.path_, 'tempfolder'))
 
@@ -850,7 +847,7 @@ class ML_model(BaseEstimator):
         self._shut_temp_folder()
 
     def run_analysis(self,
-                     train_set=None,
+                     train_set,
                      test_set=None,
                      test_title=None,
                      max_leaf_nodes=None,
@@ -876,16 +873,14 @@ class ML_model(BaseEstimator):
                                          max_leaf_nodes=max_leaf_nodes)
         print('cv score = \n', self.trainscore, '\n')
 
-        try:
+        if test_set is None:
+            print('no test_set, skip run_test method ...\n')
+        else:
             self.testscore = self.run_test(test_set,
                                            title=test_title,
                                            cv=cv,
                                            use_self_bins=True)
             print(self.testscore, '\n')
-        except FileNotFoundError:
-            print('None test_set data, skip run_test ')
-            pass
-
         self.save()
 
     def save(self):
@@ -896,13 +891,13 @@ class ML_model(BaseEstimator):
         # save esimator
         folder.write(self.estimator,
                      _get_estimator_name(self.estimator) + '.pipe')
-
+        # save parameters
         folder.write(self.get_params(False),
-                     self.__class__.__name__ + 'Param.pkl')
-
+                     self.__class__.__name__ +'.param')
+        # save instance
         folder.write(
             self, self.__class__.__name__ +
-            _get_estimator_name(self.estimator) + '.ml')
+            _get_estimator_name(self.estimator) + '.instance')
 
     def delete_model(self):
         '''delete self.folder.path_ folder containing model
@@ -913,43 +908,37 @@ class ML_model(BaseEstimator):
     def feature_names(self):  #need update
         '''get input feature names of final estimator
         '''
-        return re_fearturename(self.estimator)
+        return selected_fearturename(self.estimator)
 
-
-def train_models(estimator,
-                 train_set,
-                 test_set,
-                 test_title=None,
-                 max_leaf_nodes=10,
-                 verbose=1,
-                 grid_search=True,
-                 **kwargs):
-    '''run ML_model analysis for given train_set, test_set & estimator
+def run_analy(X, y, test_set=None, model_list=None, **kwargs):
+    '''run analysis of a series of pre-defined models as returned by 
+    get_default_estimators()
     
-    parameter
-    ----
-    estimator str:
-        pipe_main() input str in format of 'xx_xx_xx[_xx]', see pipe_main()
     '''
-    model = ML_model(estimator, estimator, verbose=verbose)
-    model.run_analysis(train_set,
-                       test_set,
-                       test_title,
-                       max_leaf_nodes,
-                       grid_search=grid_search,
-                       **kwargs)
-    return model
+    # --
+    if not os.path.exists('pre_defined_models'):
+        os.makedirs('pre_defined_models', exist_ok=True)
+    os.chdir('pre_defined_models')    
+    if model_list is None:
+        l = get_default_estimators()
+    else:
+        l = model_list
+    for i in l:
+        train_models(i, (X, y), test_set, **kwargs)
+        print("\n '{}' complete".format(i))
+ 
+    return
 
-
-def model_experiments(X=None,
-                      y=None,
-                      cv=3,
-                      scoring=['roc_auc', 'KS'],
-                      estimator_lis=None):
-    ''' experiment on different piplines
+def run_CVscores(X=None,
+                 y=None,
+                 cv=3,
+                 scoring=['roc_auc', 'KS'],
+                 estimator_lis=None):
+    ''' return CV scores of a series of pre-defined piplines as returned by
+    get_default_estimators()
     
     return
-    ----
+    -------
     dataframe 
         - cv scores of each pipeline
     '''
@@ -969,6 +958,29 @@ def model_experiments(X=None,
             lis.append(scores)
         return pd.concat(lis, axis=1, ignore_index=True).T
 
+def train_models(estimator,
+                 train_set,
+                 test_set,
+                 test_title=None,
+                 max_leaf_nodes=15,
+                 verbose=1,
+                 grid_search=True,
+                 **kwargs):
+    '''run ML_model analysis for given train_set, test_set & estimator
+    
+    parameter
+    ----
+    estimator str:
+        pipe_main() input str in format of 'xx_xx_xx[_xx]', see pipe_main()
+    '''
+    model = ML_model(estimator, estimator, verbose=verbose)
+    model.run_analysis(train_set,
+                       test_set,
+                       test_title,
+                       max_leaf_nodes,
+                       grid_search=grid_search,
+                       **kwargs)
+    return model
 
 def _reset_index(*array):
     '''reset_index for df or series, return list of *arrays
@@ -1036,10 +1048,10 @@ def _split_cv(*arrays, y=None, groups=None, cv=3, random_state=None):
 def _get_estimator_name(estimator):
     '''return estimator's class name
     '''
-    if isinstance(estimator, Pipeline):
+    if hasattr(estimator, '_final_estimator'):
         estimator = estimator._final_estimator
-    if hasattr(estimator, 'classes_'):
-        return getattr(estimator, '__class__').__name__
+    if hasattr(estimator, '__class__'):
+        return estimator.__class__.__name__
     else:
         raise TypeError('estimator is not an valid sklearn estimator')
 
@@ -1062,23 +1074,7 @@ def _get_splits_combined(xy_splits, ret_type='test'):
     if ret_type == 'train':
         return data_splits_train
 
-def _test(delete=False):
-    '''run test of ML_model class methods through train_models functions
-    '''
-    # --
-    if not os.path.exists('tests_train_models'):
-        os.makedirs('tests', exist_ok=True)
-    os.chdir('tests')    
-    X, y = make_classification(300, n_redundant=5, n_features=50)
-    l = get_default_estimators()   
-    for i in l:
-        train_models(i, (X, y), (X, y),
-                     max_leaf_nodes=10, scoring=['KS', 'roc_auc'])
-    if delete: 
-        rmtree('tests')
- 
-    return
-    
+  
 def get_default_estimators():
     '''return default list of estimators
     '''
