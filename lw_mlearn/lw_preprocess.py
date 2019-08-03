@@ -352,7 +352,7 @@ def _param_grid(estimator):
         param_grid dict
     '''
 
-    LogisticRegression = [{'C': np.logspace(-2, 0, 5)}]
+    LogisticRegression = [{'C': np.logspace(-3, 0, 8)}]
 
     SGDClassifier = [
         {
@@ -1582,7 +1582,7 @@ def plotter_lift_curve(y_pre,
     return ax, y_cut, bins, plotted_data
 
 
-def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.02,
+def plotter_woeiv_event(woe_iv, save_path=None, suffix='.pdf', dw=0.05,
                         up=1.0):
     '''plot event rate for given woe_iv Dataframe
     see woe_encoder attribute woe_iv
