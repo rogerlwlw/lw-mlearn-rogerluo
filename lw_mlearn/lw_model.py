@@ -1095,7 +1095,7 @@ def get_default_estimators(estimators='pipe'):
             'cleanNA_woe_cleanNN_frf_LogisticRegression',
             'cleanNA_woe_frf20_LogisticRegression',
             'cleanNA_woe_cleanNN_fRFE10log_LogisticRegression',
-            'cleanNA_woeq8_cleanNN_frf10_LogisticRegression',
+            'cleanNA_woeq8_cleanNN_frf_LogisticRegression',
             # default SVM, grid search log/hinge/huber/perceptron
             'cleanMean_woe_frf20_Nys_SGDClassifier',
             'cleanMean_woe_frf20_Nys_cleanNN_SGDClassifier',
