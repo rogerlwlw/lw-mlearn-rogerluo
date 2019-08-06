@@ -133,7 +133,7 @@ class Reader():
                                                        self.file_))
             return rst
         except Exception as e:
-            print("<failure>: 'file' read failed".format(self.file_))
+            print("<failure>: file '{}' read failed".format(self.file_))
             print(repr(e), '\n')
 
     def read_all(self, suffix=None, path=None, subfolder=False, **kwargs):
