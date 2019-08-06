@@ -213,6 +213,7 @@ def pipe_main(pipe=None):
         'kpca': KernelPCA(kernel='rbf', n_jobs=-1),
         'poly': PolynomialFeatures(degree=2),
         'rbf' : RBFSampler(random_state=0),
+        # kernel approximation
         'Nys' : Nystroem(random_state=0),
         'rtembedding': RandomTreesEmbedding(n_estimators=10),
         'LDA': LinearDiscriminantAnalysis(),
@@ -285,7 +286,8 @@ def pipe_main(pipe=None):
         EasyEnsembleClassifier=EasyEnsembleClassifier(),
         BalancedRandomForestClassifier=BalancedRandomForestClassifier(),
         RUSBoostClassifier=RUSBoostClassifier(),
-        SVC=SVC(C=0.1, gamma='auto'))
+        SVC=SVC(C=0.1, gamma='auto')
+        )
 
     if pipe is None:
         feature_s = {}
@@ -317,12 +319,12 @@ def pipe_main(pipe=None):
         raise ValueError("input pipe must be a string in format 'xx[_xx]'")
 
 
-def pipe_grid(estimator, pipe_grid=True):
+def pipe_grid(estimator, pipe=True):
     '''return pre-defined param_grid of given estimator
     
     estimator
         - str or sklearn estimator instance
-    pipe_grid
+    pipe
         - bool, if False return param_grid; True return param_grid as embedded
         in pipeline    
     '''
@@ -336,7 +338,7 @@ def pipe_grid(estimator, pipe_grid=True):
     if param_grid is None:
         return
 
-    if pipe_grid is True:
+    if pipe is True:
         return [{'__'.join([keys, k]): i.get(k)
                  for k in i.keys()} for i in param_grid if api.is_dict_like(i)]
     else:
@@ -356,7 +358,7 @@ def _param_grid(estimator):
 
     SGDClassifier = [
         {
-            'loss': [ 'log', 'hinge', 'perceptron', 'modified_huber']
+            'loss': [ 'log', 'modified_huber', 'perceptron']
         },
         {
             'penalty': [ 'l1', 'l2','elasticnet'],
@@ -647,10 +649,13 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         # drop na columns
         na_col = X.columns[X.apply(lambda x: all(x.isna()))]
         length = len(X)
-        if api.is_integer(self.na_thresh):
-            thresh = self.na_thresh
-        if api.is_float(self.na_thresh):
-            thresh = length * self.na_thresh
+        thresh = self.get_params()['na_thresh']
+        if api.is_integer(thresh):
+            pass
+        elif api.is_float(thresh):
+            thresh = length * thresh
+        else:
+            raise ValueError("na_thresh' must be integer or float")
 
         X.dropna(axis=1, how='any', thresh=thresh, inplace=True)
 
@@ -686,15 +691,16 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
         self.objcols = options.get('object')
         self.numcols = options.get('number')
         self.datetimecols = options.get('datetime')
-        self.obj_na = _get_imputer(self.na1)
-        self.num_na = _get_imputer(self.na2)
+        self.obj_na = _get_imputer(self.get_params()['na1'])
+        self.num_na = _get_imputer(self.get_params()['na2'])
 
         if self.obj_na is not None and not self.objcols.empty:
             self.obj_na.fit(X.reindex(columns=self.objcols))
         if self.num_na is not None and not self.numcols.empty:
             self.num_na.fit(X.reindex(columns=self.numcols))
 
-        self.out_labels = options.get(self.dtype_filter).tolist()
+        self.out_labels = options.get(
+                self.get_params()['dtype_filter']).tolist()
         # --
         if len(na_col) > 0:
             print('{} ...\n total {} columns are null , have been dropped \n'.
@@ -709,7 +715,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
                 ''''{} ...\n total {} columns are constant , have been dropped
                 \n'''.format(const_col, len(const_col)))
 
-        if self.verbose > 0:
+        if self.get_params()['verbose'] > 0:
             for k, i in options.items():
                 print('data has {} of {} columns'.format(len(i.columns), k))
             if len(na_col) > 0:
@@ -793,7 +799,7 @@ def to_num_datetime(col, name='array', thresh=0.80, **kwargs):
     except:
         pass
     if not is_numeric_convertible:
-        params = {'errors': 'coerce', 'infter_datetime_format': True}
+        params = {'errors': 'coerce', 'infer_datetime_format': True}
         params.update(kwargs)
         try:
             date = pd.to_datetime(col, **params)
@@ -937,7 +943,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         params = get_kwargs(_woe_binning, **self.get_params())
         params.update(get_kwargs(DecisionTreeClassifier, **self.get_params()))
         self.edges = _woe_binning(X, y, **params)
-        self.edges.update(self.input_edges)
+        self.edges.update(self.get_params()['input_edges'])
         # --
         df_binned = self._get_binned(X)
         self.woe_iv, self.woe_map, self.feature_iv = calc_woe(df_binned, y)
