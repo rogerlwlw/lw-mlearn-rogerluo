@@ -881,7 +881,10 @@ class ML_model(BaseEstimator):
                                            cv=cv,
                                            use_self_bins=True)
             print(self.testscore, '\n')
+            
         self.save()
+        
+        return self
 
     def save(self):
         '''save current estimator instance, self instance 
@@ -923,9 +926,15 @@ def run_analy(X, y, test_set=None, model_list=None, **kwargs):
         l = get_default_estimators()
     else:
         l = model_list
+    trainscore = []
+    testscore = []
     for i in l:
-        train_models(i, (X, y), test_set, **kwargs)
+        model = train_models(i, (X, y), test_set, **kwargs)
         print("\n '{}' complete".format(i))
+        if hasattr(model, 'test_score'):
+            testscore.append(model.testscore)
+        if hasattr(model, 'train_score'):
+            trainscore.append(model.trainscore)
  
     return
 
@@ -1075,32 +1084,48 @@ def _get_splits_combined(xy_splits, ret_type='test'):
         return data_splits_train
 
   
-def get_default_estimators():
+def get_default_estimators(estimators='pipe'):
     '''return default list of estimators
     '''
-    estimators = [
-        # linear models
-        'cleanNA_woe_LogisticRegression',
-        'cleanNA_woe_frf_LogisticRegression',
-        'cleanNA_woe_cleanNN_frf_LogisticRegression',
-        'cleanNA_woe_frf20_LogisticRegression',
-        'cleanNA_woe_cleanNN_fRFE10log_LogisticRegression',
-        'cleanNA_woeq8_cleanNN_frf10_LogisticRegression',
-        # default SVM, grid search log/hinge/huber/perceptron
-        'cleanMean_woe_frf20_Nys_SGDClassifier',
-        'cleanMean_woe_frf20_Nys_cleanNN_SGDClassifier',
-        'cleanMean_oht_stdscale_frf20_Nys_SGDClassifier',
-        # tree based models
-        'clean_oht_XGBClassifier',
-        'clean_oht_cleanNN_fxgb_XGBClassifier',
-        'clean_oht_cleanNN_inlierForest_fxgb_XGBClassifier',
-        'clean_oht_frf_RandomForestClassifier',
-        'clean_oht_cleanNN_RandomForestClassifier',
-        'clean_oht_fxgb_BalancedRandomForestClassifier',
-        'clean_oht_cleanNN_frf_AdaBoostClassifier',
-        'clean_oht_fxgb_RUSBoostClassifier',
-        'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
-        'clean_oht_fsvm_cleanNN_GradientBoostingClassifier',
-        'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
-    ]  
-    return estimators
+    if estimators == 'pipe':
+        estimators_lis = [
+            # linear models
+            'cleanNA_woe_LogisticRegression',
+            'cleanNA_woe_frf_LogisticRegression',
+            'cleanNA_woe_cleanNN_frf_LogisticRegression',
+            'cleanNA_woe_frf20_LogisticRegression',
+            'cleanNA_woe_cleanNN_fRFE10log_LogisticRegression',
+            'cleanNA_woeq8_cleanNN_frf10_LogisticRegression',
+            # default SVM, grid search log/hinge/huber/perceptron
+            'cleanMean_woe_frf20_Nys_SGDClassifier',
+            'cleanMean_woe_frf20_Nys_cleanNN_SGDClassifier',
+            'cleanMean_oht_stdscale_frf20_Nys_SGDClassifier',
+            # tree based models
+            'clean_oht_XGBClassifier',
+            'clean_oht_cleanNN_fxgb_XGBClassifier',
+            'clean_oht_cleanNN_inlierForest_fxgb_XGBClassifier',
+            'clean_oht_frf_RandomForestClassifier',
+            'clean_oht_cleanNN_RandomForestClassifier',
+            'clean_oht_fxgb_BalancedRandomForestClassifier',
+            'clean_oht_cleanNN_frf_AdaBoostClassifier',
+            'clean_oht_fxgb_RUSBoostClassifier',
+            'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
+            'clean_oht_fsvm_cleanNN_GradientBoostingClassifier',
+            'clean_oht_fxgb_DecisionTreeClassifier',
+            'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
+        ]
+    elif estimators == 'clf':
+        estimators_lis = [
+                'LogisticRegression',
+                'LinearDiscriminantAnalysis',
+#                'SGDClassifier',
+                'XGBClassifier',
+                'RandomForestClassifier',
+                'BalancedRandomForestClassifier',
+                'AdaBoostClassifier',
+                'RUSBoostClassifier',
+                'GradientBoostingClassifier',
+                'DecisionTreeClassifier',
+                'KNeighborsClassifier'
+                ]
+    return estimators_lis
