@@ -215,7 +215,7 @@ def pipe_main(pipe=None):
         'rbf' : RBFSampler(random_state=0),
         # kernel approximation
         'Nys' : Nystroem(random_state=0),
-        'rtembedding': RandomTreesEmbedding(n_estimators=10),
+        'rfembedding': RandomTreesEmbedding(n_estimators=10),
         'LDA': LinearDiscriminantAnalysis(),
         'QDA': QuadraticDiscriminantAnalysis(),
     }
