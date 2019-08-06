@@ -20,6 +20,12 @@ from sklearn.metrics import auc, roc_curve
 
 from .utilis import get_flat_list, get_kwargs
 
+# import mlens visualization tools 
+from mlens.visualization import (
+        pca_comp_plot, pca_plot, corr_X_y, corrmat, clustered_corrmap, 
+        exp_var_plot
+        )
+
 plt.style.use('seaborn')
 plt.rcParams.update({
     'figure.dpi':
@@ -160,10 +166,10 @@ def plotter_auc_y(y_pre, y_true, **kwargs):
 
 
 def plotKS(y_pred, y_true, n, asc):
-
+    '''
     # preds is score: asc=1
     # preds is prob: asc=0
-
+    '''
     pred = y_pred  # 预测值
     bad = y_true  # 取1为bad, 0为good
     ksds = pd.DataFrame({'bad': bad, 'pred': pred})
@@ -251,6 +257,7 @@ def plotKS(y_pred, y_true, n, asc):
     plt.title('KS=%s ' % np.round(ks_value, 4) +
               'at Pop=%s' % np.round(ks_pop, 4),
               fontsize=15)
+    plt.xlabel('Percentage')
 
     return ksds
 
