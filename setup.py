@@ -26,7 +26,8 @@ setup(
     install_requires=[
         'sklearn-pandas>=1.8.0', 'numpy>=1.15.0', 'pandas>=0.24.0',
         'scikit-learn>=0.21.2', 'scipy>=1.1.0', 'matplotlib>=3.0.0',
-        'yapf>=0.25.0', 'xgboost>=0.81', 'imbalanced-learn>=0.4.0'
+        'yapf>=0.25.0', 'xgboost>=0.81', 'imbalanced-learn>=0.4.0',
+        'mlens>=0.2.3',
     ],
     author="rogerluo",
     author_email="coolww@outlook.com",
