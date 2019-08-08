@@ -80,9 +80,8 @@ from imblearn.ensemble import (
 from imblearn.combine import SMOTEENN, SMOTETomek
 from imblearn import FunctionSampler
 
-from .utilis import (dec_iferror_getargs, get_kwargs)
-from .read_write import Path
-from .plotter import plt, plotter_rateVol
+from lw_mlearn.utilis.utilis import (dec_iferror_getargs, get_kwargs)
+from lw_mlearn.utilis.plotter import plt, plotter_rateVol
 
 
 def index_duplicated(string_list):
@@ -872,9 +871,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
     score - not used as estimator method usually to study iv of each feature
         - return (woe_iv, woe_map, iv),  using self edges
     '''
-
-    path_ = Path()
-
+    
     def __init__(self,
                  input_edges={},
                  cat_num_lim=5,
