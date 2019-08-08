@@ -25,9 +25,6 @@ of:
 8) performance evaluation (plot multi_metrics/scores)
 9) production integration
 
-For deep learning:
-=============
-    Keras framework is included in lw_keras package(currently only for MLP)
 
 Main hepler functions:
 =============
