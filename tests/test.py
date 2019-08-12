@@ -5,9 +5,8 @@ Created on Mon Jun  3 14:10:59 2019
 @author: rogerluo
 """
 import os
-from shutil import rmtree
-from lw_mlearn.lw_model import get_default_estimators, train_models
 from sklearn.datasets import make_classification
+from lw_mlearn.lw_model import get_default_estimators, train_models
 
 def _test_lw_model(X=None, y=None, delete=False):
     '''run test of ML_model class methods through train_models function
@@ -18,13 +17,12 @@ def _test_lw_model(X=None, y=None, delete=False):
     os.chdir('tests_result')
     if  X is None or y is None: 
         X, y = make_classification(300, n_redundant=5, n_features=50)
-    l = get_default_estimators()   
+    l = get_default_estimators()[:2]   
     for i in l:
-        train_models(i, (X, y), (X, y),
+        m = train_models(i, (X, y), (X, y),
                      max_leaf_nodes=10, scoring=['KS', 'roc_auc'])
-    if delete:
-        os.chdir('..')
-        rmtree('tests_result')
+        if delete:
+            m.delete_model()
  
     return
 
