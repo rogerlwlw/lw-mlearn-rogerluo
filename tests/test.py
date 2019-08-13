@@ -6,6 +6,7 @@ Created on Mon Jun  3 14:10:59 2019
 """
 import os
 from sklearn.datasets import make_classification
+
 from lw_mlearn.lw_model import get_default_estimators, train_models
 
 def _test_lw_model(X=None, y=None, delete=False):

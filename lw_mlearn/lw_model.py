@@ -1119,7 +1119,6 @@ def get_default_estimators(estimators='pipe'):
         estimators_lis = [
                 'LogisticRegression',
                 'LinearDiscriminantAnalysis',
-#                'SGDClassifier',
                 'XGBClassifier',
                 'RandomForestClassifier',
                 'BalancedRandomForestClassifier',

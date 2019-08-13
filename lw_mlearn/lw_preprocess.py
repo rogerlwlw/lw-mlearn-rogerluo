@@ -100,7 +100,7 @@ def index_duplicated(string_list):
         
     
     
-def pipe_main(pipe=None):
+def pipe_main(pipe=None, return_clf=False):
     '''pipeline construction using sklearn estimators, final step support only
     classifiers currently
     
@@ -1644,3 +1644,4 @@ def get_custom_scorer():
     scorer_dict['KS'] = make_scorer(ks_score, needs_threshold=True)
 
     return scorer_dict
+
