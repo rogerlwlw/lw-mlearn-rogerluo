@@ -18,7 +18,7 @@ from pandas.core.dtypes import api
 from scipy import interp
 from sklearn.metrics import auc, roc_curve
 
-from .utilis import get_flat_list, get_kwargs
+from lw_mlearn.utilis.utilis import get_flat_list, get_kwargs
 
 # import mlens visualization tools 
 from mlens.visualization import (
