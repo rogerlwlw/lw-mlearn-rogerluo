@@ -11,7 +11,7 @@ import shutil
 
 from sklearn.utils import check_consistent_length
 
-from .utilis import get_flat_list, get_kwargs
+from lw_mlearn.utilis.utilis import get_flat_list, get_kwargs
 
 
 class _Obj():
