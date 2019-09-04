@@ -80,7 +80,8 @@ from imblearn.ensemble import (
 from imblearn.combine import SMOTEENN, SMOTETomek
 from imblearn import FunctionSampler
 
-from lw_mlearn.utilis.utilis import (dec_iferror_getargs, get_kwargs)
+from lw_mlearn.utilis.utilis import (dec_iferror_getargs, get_kwargs,
+                                     get_sk_estimators)
 from lw_mlearn.utilis.plotter import plt, plotter_rateVol
 
 
@@ -132,8 +133,10 @@ def pipe_main(pipe=None, return_clf=False):
     }
     #
     encode = {
-        'woe': Woe_encoder(max_leaf_nodes=8),
+        'woe8': Woe_encoder(max_leaf_nodes=8),
+        'woe5': Woe_encoder(max_leaf_nodes=5),
         'woeq8' : Woe_encoder(q=8),
+        'woeq5' : Woe_encoder(q=5),
         'woeb5' : Woe_encoder(bins=5),
         'oht': Oht_encoder(),
         'ordi': Ordi_encoder(),
@@ -305,6 +308,8 @@ def pipe_main(pipe=None, return_clf=False):
         all_keys_dict = {}
         all_keys_dict.update(**clean, **encode, **scale, **feature_c,
                              **feature_m, **feature_u, **estimator, **resample)
+        if len(l) < 2: 
+            return all_keys_dict[l[0]]
         steps = []
         for i, j in zip(l, index_duplicated(l)):
             if all_keys_dict.get(i) is not None:
@@ -625,7 +630,7 @@ class Split_cls(BaseEstimator, TransformerMixin, Base_clean):
     na2
         - fill na stategy for numeric data column, default None
     na_thresh
-        - int or float(0.0-1.0) thresh number of null values to drop column
+        - int or float(0.0-1.0) thresh number of non-null values to drop
     '''
 
     def __init__(self,
@@ -859,7 +864,10 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
     woe_iv
         - df, woe & iv of all features, concatenated in one df
     feature_importances_ 
-        - iv value of each feature
+        - iv value of each feature, NA for iv <0.02 to be used in feature
+        selection
+    feature_iv 
+        - iv value of each feature (available of iv < 0.02)
       
     method
     -----
@@ -868,8 +876,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         self edges & woe_map
     transform
         - to get woe encoded feature matrix using self woe_map
-    score - not used as estimator method usually to study iv of each feature
-        - return (woe_iv, woe_map, iv),  using self edges
+
     '''
     
     def __init__(self,
@@ -879,7 +886,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
                  bins=None,
                  max_leaf_nodes=None,
                  min_samples_leaf=0.01,
-                 min_samples_split=0.01,
+                 min_samples_split=0.05,
                  criterion='gini',
                  min_impurity_decrease=1e-5,
                  min_impurity_split=None,
@@ -933,7 +940,7 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         ----
         X - df
         
-        y - class label
+        y - class label 
         '''
         X = self._fit(X)
         # --
@@ -983,7 +990,15 @@ class Woe_encoder(BaseEstimator, TransformerMixin, Base_clean):
         '''
         plotter_woeiv_event(self.woe_iv, save_path, suffix, dw, up)
 
-
+def iv_single(X, y, **kwargs):
+    '''return scalor 'IV' value for a pair of x, y vector, used as statiscs 
+    function, kwargs see Woe_encoder
+    '''
+    x = pipe_main('cleanNA').fit_transform(X)
+    woe_kws = kwargs if len(kwargs) else {'max_leaf_nodes' : 5}
+    woe = Woe_encoder(**woe_kws).fit(x, y)
+    return woe.feature_iv.max()
+    
 def _tree_univar_bin(arr_x, arr_y, **kwargs):
     '''univariate binning based on binary decision Tree
     
@@ -1638,7 +1653,7 @@ def psi_score(act, ex):
 
 
 def get_custom_scorer():
-    ''' return custom scorer dict
+    ''' return custom scorer dict, 'KS' scorer added
     '''
     scorer_dict = {}
     scorer_dict['KS'] = make_scorer(ks_score, needs_threshold=True)

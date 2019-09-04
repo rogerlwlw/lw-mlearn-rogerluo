@@ -11,36 +11,49 @@ Contain functions
 """
 import numpy as np
 import pandas as pd
+import inspect
 import matplotlib.pyplot as plt
-
 import matplotlib.ticker as ticker
+import seaborn as sns
+
+from collections import OrderedDict
+
+from functools import reduce
+from seaborn.categorical import *
 from pandas.core.dtypes import api
 from scipy import interp
 from sklearn.metrics import auc, roc_curve
 
-from lw_mlearn.utilis.utilis import get_flat_list, get_kwargs
+from lw_mlearn.utilis.utilis import get_flat_list, get_kwargs, dict_diff
+from lw_mlearn.utilis.docstring import Appender
 
-# import mlens visualization tools 
-from mlens.visualization import (
-        pca_comp_plot, pca_plot, corr_X_y, corrmat, clustered_corrmap, 
-        exp_var_plot
-        )
+from scipy.interpolate import interp1d
+
+## import mlens visualization tools 
+#from mlens.visualization import (
+#        pca_comp_plot, pca_plot, corr_X_y, corrmat, clustered_corrmap, 
+#        exp_var_plot
+#        )
 
 plt.style.use('seaborn')
+
 plt.rcParams.update({
-    'figure.dpi':
-    90.0,
+    'figure.dpi': 120.0,
     'axes.unicode_minus':
     False,
     'font.family': ['sans-serif'],
     'font.sans-serif': [
+        'Microsoft JhengHei', # ch  
+        'STSong', # ch
+        'STXihei', # ch   
+        'sans-serif',
         'Arial',
         'Liberation Sans',
         'DejaVu Sans',
         'Bitstream Vera Sans',
-        'sans-serif'
-        'Microsoft YaHei',
-        'Microsoft JhengHei',
+        'sans-serif',
+        'DFKai-SB',
+        'STKaiti',
     ],
     'font.size':
     10.0,
@@ -64,6 +77,187 @@ def txt_fontdict(**kwargs):
     print(font)
     return font
 
+#def _get_plot_fn(kind):
+#    '''return plot function
+#    '''
+#    if callable(kind):
+#        return kind
+#    
+#    plot_fn = dict(
+#            dist=sns.distplot,
+#            hist=plt.hist,            
+#            )
+#    fn = plot_fn.get(kind)
+#    if kind is None:
+#        return plot_fn.keys()
+#    
+#    if fn is None:
+#        raise ValueError("invalid input for 'kind'")
+#    else:        
+#        return fn
+
+def _get_snsplot(kind=None):
+    '''return plot functions in seaborn catplot module
+    '''
+    if callable(kind):
+        return kind
+    lst = inspect.getmembers(sns, inspect.isfunction) 
+    fn_dict = dict([i for i in lst if i[0].count('plot')>0])
+    if kind is None:
+        return fn_dict.keys()
+    # Determine the plotting function
+    try:
+        plot_func = fn_dict[kind]
+    except KeyError:
+        err = "Plot kind '{}' is not recognized".format(kind)
+        raise ValueError(err)
+    return plot_func
+
+@Appender(sns.FacetGrid.__doc__, join='\nsee Facetgrid\n')
+def plotter_facet(data,  plot_args, subset=None, kind='distplot', **kwargs):
+    '''plot grids of plots using seaborn Facetgrid ::
+    
+    parameter
+    -----
+    data : DataFrame
+    
+        Tidy (“long-form”) dataframe where each column is a variable and each 
+        row is an observation.
+
+    subset (dict):
+        fitler subset of data by column's categorical values
+        
+    kind:
+        callable plot fn or str to call plot api in _get_plot_fn
+        
+    plot_args (tuple):
+        (colname2 as x, colname2 as y ) indexed by DataFrame   
+        
+    row, col, hue : strings
+    
+        Variables that define subsets of the data, which will be drawn on 
+        separate facets in the grid. See the *_order parameters to control 
+        the order of levels of this variable.
+    
+    col_wrap : int, optional
+    
+        “Wrap” the column variable at this width, so that the column facets
+        span multiple rows. Incompatible with a row facet.
+    
+    share{x,y} : bool, ‘col’, or ‘row’ optional
+    
+        If true, the facets will share y axes across columns and/or x axes 
+        across rows.
+    
+    height : scalar, optional
+    
+        Height (in inches) of each facet. See also: aspect.
+    
+    aspect : scalar, optional
+    
+        Aspect ratio of each facet, so that aspect * height gives the width of 
+        each facet in inches.
+    
+    palette : palette name, list, or dict, optional
+    
+        Colors to use for the different levels of the hue variable. 
+        Should be something that can be interpreted by color_palette(), or a dictionary mapping hue levels to matplotlib colors.
+    
+    {row,col,hue}_order : lists, optional
+    
+        Order for the levels of the faceting variables. By default, 
+        this will be the order that the levels appear in data or, if the variables are pandas categoricals, the category order.
+
+    '''
+    if subset is not None:
+        data = filter_subset(data, subset)
+        
+    fn_plot = _get_snsplot(kind)
+    # get facet kwds
+    facet_kws = get_kwargs(sns.FacetGrid, **kwargs)
+    # get fn kwds
+    plot_fn_kws = get_kwargs(fn_plot, **kwargs)
+    # get other than kwds
+    ax_kws = dict_diff(kwargs, facet_kws.keys() | plot_fn_kws.keys())
+    # generate grid
+    g = sns.FacetGrid(data, **facet_kws)
+    # map plot function
+    g.map(fn_plot, *plot_args, **plot_fn_kws)
+    
+    if len(ax_kws) > 0 :
+        g.set(**ax_kws)  
+    
+    g.add_legend()   
+    return g
+
+@Appender(sns.catplot.__doc__, join='\nsee catplot\n')
+@Appender(sns.violinplot.__doc__, join='\nsee violinplot\n')
+def plotter_catplot(data, kind='violin', swarm=False, hline=None,
+                    subset=None, **kwargs):
+    '''make a distr plot through catplot function ::    
+
+    parameter
+    ---------
+    data (DataFrame):
+        data to generate violin plot through seaborn
+    kind (str): 'violin' default
+        ['violin', 'swarm', 'box', 'bar', 'count'], see 
+    swarm (bool):
+        whether to combine a swarmplot, default False
+    hline (int):
+        add a horizontal base line 
+    subset (dict):
+        fitler subset of data by column's categorical values
+    kwargs:
+        other keywords to customize ax and to pass to plot functions
+    
+    return
+    --------    
+        g : FacetGrid
+            Returns the FacetGrid object with the plot on it for further 
+            tweaking.
+    '''
+    if subset is not None:
+        data = filter_subset(data, subset)
+        
+    # get plot function key words
+    fn_kws = dict(
+        violin = get_kwargs(sns.violinplot, **kwargs),
+        box = get_kwargs(sns.boxplot, **kwargs),
+        swarm = get_kwargs(sns.swarmplot, **kwargs),
+        bar = get_kwargs(sns.barplot, **kwargs),
+        count = get_kwargs(sns.countplot, **kwargs),
+        cat = get_kwargs(sns.catplot, **kwargs),
+        point = get_kwargs(sns.pointplot, **kwargs),
+        factor = get_kwargs(sns.factorplot, **kwargs),
+    )
+    plot_fn_kws = fn_kws.get(kind) 
+    plot_fn_kws.update(fn_kws.get('cat'))
+            
+    
+    if hline is not None:
+        plot_fn_kws.update(legend_out=False)
+    # plot categorical data   
+    g = sns.catplot(data=data, kind=kind, **plot_fn_kws)
+    
+    if swarm:
+        g.map(sns.swarmplot, data=data, ax=g.ax, x=kwargs.get('x'),
+              y=kwargs.get('y'), size=2.5, color='k', alpha=0.3)
+    if hline is not None:
+        g.map(plt.axhline, y=hline, color='red', linestyle='--', 
+              label='baseline%s'%hline)
+        g._legend_out = True
+        g.add_legend()  
+    
+    ax_kws = dict_diff(kwargs, plot_fn_kws.keys())       
+    if 'savefig' in ax_kws:
+        ax_kws.pop('savefig')
+    if len(ax_kws) > 0 :
+        g.set(**ax_kws)
+    # save fig to savefig path    
+    if kwargs.get('savefig') is not None:
+        _save_fig(g, kwargs['savefig'])
+    return g
 
 def plotter_auc(fpr,
                 tpr,
@@ -341,7 +535,9 @@ def plotter_rateVol(df,
                     ymajor_formatter='percent',
                     xlabel_position='bottom',
                     xlabelrotation=30,
-                    anno=False):
+                    anno=False,
+                    show_mean=True,
+                    **subplot_kw):
     ''' plot rate along with volume
     
     df - 3 cols [D1, rate, denominator]
@@ -367,7 +563,7 @@ def plotter_rateVol(df,
     if ax:
         fig, axe = plt.gcf(), ax
     else:
-        fig, axe = plt.subplots(1, 1)
+        fig, axe = plt.subplots(1, 1, **subplot_kw)
 
     df = df.reset_index(drop=True)
     labels = df.iloc[:, 0]
@@ -380,10 +576,12 @@ def plotter_rateVol(df,
     out.append(rate.plot(ax=axe, kind='line', style=lstyle))
     axe_right = axe.twinx()
     out.append(vol.plot(ax=axe_right, kind='bar', alpha=0.4, color=bar_c))
-    axe.axhline(rate_weighted, linestyle='--', color='yellow')
+    
+    if show_mean:
+        axe.axhline(rate_weighted, linestyle='--', color='yellow')
 
     # set axe attr
-    fmt = get_ticks_formatter(ymajor_formatter)
+    fmt = get_ticks_formatter(ymajor_formatter, decimals=1)
     plt.setp(axe,
              ylabel=rate.name,
              xlabel=labels.name,
@@ -397,14 +595,14 @@ def plotter_rateVol(df,
     # set axe_right attr
     axe_right.set_ylabel(vol.name)
     axe_right.grid(False)
-
-    bbox = dict(boxstyle="round", fc='w', alpha=1)
-    axe.annotate('mean rate=%-0.2f%%(vol=%d)' %
-                 (rate_weighted * 100, sum(vol)), (0, rate_weighted),
-                 (0.01, 0.95),
-                 xycoords='data',
-                 textcoords='axes fraction',
-                 bbox=bbox)
+    if show_mean:
+        bbox = dict(boxstyle="round", fc='w', alpha=1)
+        axe.annotate('mean rate=%-0.2f%%(vol=%d)' %
+                     (rate_weighted * 100, sum(vol)), (0, rate_weighted),
+                     (0.01, 0.95),
+                     xycoords='data',
+                     textcoords='axes fraction',
+                     bbox=bbox)
     if anno is True:
         _annotate(rate.index.values, rate.values, axe)
     # get legends
@@ -413,6 +611,54 @@ def plotter_rateVol(df,
 
     return out
 
+def plotter_dist_thresh(s, step=1, thresh=53, subplot_kw=None, **fig_kws):
+    '''plot distribution of series and percentage above thresh
+    
+    s - ndarray or series:
+        vector to calculate percentile distribution
+    step - integer or float:
+        step of percentages to plot cummulative distribution
+    thresh - integer:
+        threshhold/cutoff of decision
+    '''
+    s = pd.Series(s)
+    q = np.arange(100, step=step) / 100
+    q = np.append(q, 1)
+    perc = s.quantile(q).drop_duplicates()
+    
+    x = perc
+    y = 1 - perc.index
+    y = y.rename('percentage above')
+    f = interp1d(x, y, kind='cubic')
+    
+    fig, axes = plt.subplots(2, 1, sharex=True, subplot_kw=subplot_kw, 
+                             **fig_kws)
+    # hist plot
+    sns.distplot(s.dropna(), ax=axes[1], kde=False,
+                 hist_kws={'rwidth' : 0.95})
+    # line plot
+    sns.lineplot(x, y, ax=axes[0], c='green')
+    fmt = get_ticks_formatter('percent', decimals=1)
+    axes[0].yaxis.set_major_formatter(fmt)
+    if thresh:       
+        axes[0].axvline(thresh, linestyle='--', lw=3, color='y', 
+            label='%1.0f'%thresh)
+        axes[0].annotate(
+                ' %1.0f%% above %1.0f score '%(100*f(thresh),thresh),
+                xy=(thresh, f(thresh)), xycoords='data',
+                xytext=(0.9, 0.9), textcoords='axes fraction',
+                ha='right', va='bottom', size=15, 
+                arrowprops=dict(
+                        arrowstyle="->",
+                        shrinkA=0, shrinkB=10,
+                        connectionstyle="arc3,rad=.2",
+                        lw=3))
+
+    axes[1].set_ylabel('count')
+    
+    plt.tight_layout()
+    
+    return perc.reset_index()
 
 def get_ticks_formatter(name, *args, **kwargs):
     ''' return ticks formattor  
@@ -421,14 +667,55 @@ def get_ticks_formatter(name, *args, **kwargs):
     see matplotlib.ticker        
     '''
     if name == 'percent':
-        frm = ticker.PercentFormatter(xmax=1, decimals=2, *args, **kwargs)
+        frm = ticker.PercentFormatter(xmax=1, *args, **kwargs)
     if name == 'func':
         frm = ticker.FuncFormatter(*args, **kwargs)
     if name == 'scalar':
         frm = ticker.ScalarFormatter(*args, **kwargs)
-    if name == 'FormatStrFormatter':
-        frm = ticker.FormatStrFormatter(*args, **kwargs)
+
     return frm
+
+def plotter_k_timeseries(time_rate, subplot_kw=None, **fig_kws):
+    '''plot time series of rate and volume
+    
+    time_rate - df:
+        pass rate at different nodes
+    time_vol - series:
+        vol at different nodes  
+        
+    .. note ::         
+        index of df/series is used as xaxis 
+    
+    '''
+    
+    time_vol = None
+    for name, col in time_rate.iteritems():
+        if any(col > 1.0):
+            time_vol = time_rate.pop(name)
+            break
+    if time_vol is not None:
+        
+        fig, axe = plt.subplots(2, 1, sharex=True,
+                                subplot_kw=subplot_kw, **fig_kws)
+        # plot line plot for rate data
+        sns.lineplot(data=time_rate, ax=axe[0], palette='Set1',
+                     markers=True, markersize=6)
+        fmt = get_ticks_formatter('percent', decimals=1)
+        axe[0].yaxis.set_major_formatter(fmt)
+        # plot area plot for volume data
+        sns.lineplot(data=time_vol.to_frame(), markers=['o'], markersize=6, 
+                     markerfacecoloralt='red', ax=axe[1])
+        axe[1].fill_between(time_vol.index, 0, time_vol, alpha=.1 )
+    else:
+        fig, ax = plt.subplots(subplot_kw=subplot_kw, **fig_kws)
+        sns.lineplot(data=time_rate, ax=ax, palette='Set1',
+                     markers=True, markersize=6)
+        fmt = get_ticks_formatter('percent', decimals=1)
+        ax.yaxis.set_major_formatter(fmt)   
+        
+    fig.autofmt_xdate()
+    plt.tight_layout()
+    return
 
 
 def plotter_score_path(df_score, title=None, cm=None, style='-.o'):
@@ -530,3 +817,84 @@ def plotter_contours(ax,
     Z = Z.reshape(xx.shape)
     out = ax.contourf(xx, yy, Z, **params)
     return out
+
+def filter_subset(data, filter_con, **kwargs):
+    '''
+    data:
+        DataFrame
+    filter_con (dict):
+        filter condition on data's columns, 
+        eg: {col1 : [str1, str2, ...], ...}
+        
+    '''
+    if not isinstance(data, pd.DataFrame):
+       raise ValueError("'data' must be DataFrame") 
+    gen = (data[k].isin(v) for k, v in filter_con.items())        
+    filtered = reduce(lambda x, y: x & y, gen)
+    return data.loc[filtered]
+    
+def _save_fig(fig, file, **kwargs):
+    '''save fig object to 'path' if it has 'savefig' method
+    '''
+    if hasattr(fig, 'savefig'):
+        fig.savefig(file, **kwargs)
+    else:
+        getattr(fig, 'get_figure')().savefig(file, **kwargs)    
+        
+def color_reference(keys=None):
+    '''
+    '''   
+    cmaps = OrderedDict()
+    
+    cmaps['Perceptually Uniform Sequential'] = [
+            'viridis', 'plasma', 'inferno', 'magma', 'cividis']
+
+    cmaps['Sequential'] = [
+                'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
+                'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
+                'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn']
+    
+    cmaps['Diverging'] = [
+            'PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu',
+            'RdYlBu', 'RdYlGn', 'Spectral', 'coolwarm', 'bwr', 'seismic']
+    
+    cmaps['Miscellaneous'] = [
+            'flag', 'prism', 'ocean', 'gist_earth', 'terrain', 'gist_stern',
+            'gnuplot', 'gnuplot2', 'CMRmap', 'cubehelix', 'brg',
+            'gist_rainbow', 'rainbow', 'jet', 'nipy_spectral', 'gist_ncar']
+    
+    cmaps['Qualitative'] = ['Pastel1', 'Pastel2', 'Paired', 'Accent',
+                        'Dark2', 'Set1', 'Set2', 'Set3',
+                        'tab10', 'tab20', 'tab20b', 'tab20c']
+    
+    
+    nrows = max(len(cmap_list) for cmap_category, cmap_list in cmaps.items())
+    gradient = np.linspace(0, 1, 256)
+    gradient = np.vstack((gradient, gradient))
+
+
+    def plot_color_gradients(cmap_category, cmap_list, nrows):
+        fig, axes = plt.subplots(nrows=nrows)
+        fig.subplots_adjust(top=0.95, bottom=0.01, left=0.2, right=0.99)
+        axes[0].set_title(cmap_category + ' colormaps', fontsize=14)
+    
+        for ax, name in zip(axes, cmap_list):
+            ax.imshow(gradient, aspect='auto', cmap=plt.get_cmap(name))
+            pos = list(ax.get_position().bounds)
+            x_text = pos[0] - 0.01
+            y_text = pos[1] + pos[3]/2.
+            fig.text(x_text, y_text, name, va='center', ha='right', fontsize=10)
+    
+        # Turn off *all* ticks & spines, not just the ones with colormaps.
+        for ax in axes:
+            ax.set_axis_off()
+
+    if keys is None:
+        return cmaps.keys()
+    else:       
+        for cmap_category, cmap_list in cmaps.items():
+            if cmap_category in keys:
+                plot_color_gradients(cmap_category, cmap_list, nrows)
+        
+            plt.show()
+    

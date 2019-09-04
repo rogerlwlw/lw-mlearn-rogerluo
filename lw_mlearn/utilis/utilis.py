@@ -9,7 +9,27 @@ import inspect
 
 from pandas.core.dtypes import api
 from functools import wraps, reduce
+from sklearn.utils.testing import all_estimators
 
+def get_sk_estimators(clf, type_filter='classifier'):
+    '''
+    clf (str):
+        
+        name of estimators
+    
+    return
+    -----
+        intance of sklearn estimators
+    '''
+    # sklearn estimator
+    t = all_estimators(type_filter=['classifier'])
+    estimator = {}
+    for i in t:
+        try:
+            estimator.update({i[0]: i[1]()})
+        except Exception:
+            continue
+    return estimator.get(clf)
 
 def join_embed_keys(dictionary):
     ''' join keys by delimiter '_' from embedding dicts, for instance:
@@ -63,12 +83,18 @@ def default_func(func, new_funcname=None, **kwargs_outer):
 
 
 def dict_subset(d, keys):
-    '''update dict with a subset of keys
+    '''return dict inlcude only a subset of keys
     
     keys --> iterable of keys
     '''
     return {i: d.get(i) for i in keys}
 
+def dict_diff(d, keys):
+    '''return subset of dicts with a series of keys removed    
+    '''
+    d_keys = set(d.keys())
+    in_keys = d_keys.difference(keys)
+    return dict_subset(d, in_keys)
 
 def inverse_dict(d):
     '''return inversed dict {k, val} as  {val, k} 

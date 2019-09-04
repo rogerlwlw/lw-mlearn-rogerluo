@@ -12,7 +12,7 @@ from sklearn.utils.testing import all_estimators
 from mlens.ensemble import SuperLearner, Subsemble, BlendEnsemble
 from mlens.preprocessing import Subset
 from lw_mlearn.utilis import docstring
-from lw_mlearn.utilis.utilis import get_kwargs
+from lw_mlearn.utilis.utilis import get_kwargs, get_sk_estimators
 from functools import wraps
 
 
@@ -21,29 +21,16 @@ def get_score_fn(scoring):
     scoring: str or callable
     
     return
-    ----
-    scoring function that accepts an array of true values and an array 
-    of predictions: score = f(y_true, y_pred).      
+    ------
+    scoring function:
+        that accepts an array of true values and an array 
+        of predictions: score = f(y_true, y_pred).      
     '''
     if callable(scoring):
         return scoring
     else:
         return getattr(metrics, scoring)
 
-def get_sk_estimators(clf, type_filter='classifier'):
-    '''
-    clf (str):
-        name of estimators
-    '''
-    # sklearn estimator
-    t = all_estimators(type_filter=['classifier'])
-    estimator = {}
-    for i in t:
-        try:
-            estimator.update({i[0]: i[1]()})
-        except Exception:
-            continue
-    return estimator.get(clf)
     
 @docstring.Appender(SuperLearner.add.__doc__)
 @wraps(SuperLearner)
@@ -56,7 +43,7 @@ def build_stack(
              # initiation parameters
              folds=3,
              shuffle=True,
-             scorer='f1_score',
+             scorer=None,
              random_state=0,
              raise_on_exception=True,
              n_jobs=-1,
@@ -67,21 +54,22 @@ def build_stack(
              partition_estimator=None,
              test_size=0.5,
              ens_type='stack'):
-    '''return stack ensemble model instance
+    '''return stack/blend/subsemble ensemble model instance
     
     params 
     -------
     see __doc__ of SuperLearner & SuperLearner.add, already wrapped in
     '''
-    scorer = get_score_fn(scorer) # return scoring functions
+    if scorer is not None:
+        scorer = get_score_fn(scorer) # return scoring functions
     meta_estimator = get_sk_estimators(meta_estimator)
     
     L = locals().copy()
-    # --
-    ens_model = {'stack' : SuperLearner, 'subsembel' : Subsemble, 
-                 'blend' : BlendEnsemble}
-    instance = ens_model[ens_type]
-    ens = instance(**get_kwargs(instance, **L))
+    # --    
+    ens_class = {'stack' : SuperLearner, 'subsemble' : Subsemble, 
+                 'blend' : BlendEnsemble}[ens_type]
+    ens = ens_class(**get_kwargs(ens_class, **L))
+    
     ens.add(**get_kwargs(ens.add, **L))
     
     if meta_estimator is not None:
@@ -102,24 +90,23 @@ if __name__ == '__main__':
     X.pop('NumberOfTime60-89DaysPastDueNotWorse')
     y = X.pop('SeriousDlqin2yrs').values
     
-    X = pipe_main('cleanNA_woe').fit_transform(X, y).values    
-    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+    X = pipe_main('cleanNA_woe5').fit_transform(X, y).values    
+    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.7)
     # --
     esti_lst = [pipe_main(i) for i in get_default_estimators('clf')]    
     ens = build_stack(estimators=esti_lst, 
                       preprocessing=None, 
                       proba=True, 
-                      propagate_features=range(7), ens_type='blend')
+                      propagate_features=range(7), ens_type='stack')
     ens.fit(x_train, y_train)
     y_pre = ens.predict_proba(x_test)
     roc_auc_score(y_test, y_pre[:, 1])
     plotter_lift_curve(y_pre[:,1], y_test, max_leaf_nodes=None, 
                        bins=None, q=20, labels=False, ax=None,
-                       header=None)   
+                       header=None)  
     
-#    m = SuperLearner()
-#    m.add(esti_lst, proba=True, propagate_features=range(7))
-#    m.add_meta(pipe_main('LogisticRegression'), proba=True)
-#    m.fit(x_train, y_train)
-#    y_pre = m.predict_proba(x_test)
-#    roc_auc_score(y_test, y_pre[:, 1])
+#    from lw_mlearn import ML_model
+#    clf = ML_model('HistGradientBoostingClassifier')     
+#    clf.fit(x_train, y_train)
+#    clf.plot_lift(x_test, y_test, q=20)
+#    clf.test_score(x_test, y_test, cv=3, scoring=['KS', 'roc_auc'])

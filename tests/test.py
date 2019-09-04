@@ -21,7 +21,8 @@ def _test_lw_model(X=None, y=None, delete=False):
     l = get_default_estimators()[:2]   
     for i in l:
         m = train_models(i, (X, y), (X, y),
-                     max_leaf_nodes=10, scoring=['KS', 'roc_auc'])
+                     max_leaf_nodes=10, scoring=['KS', 'roc_auc'], 
+                     grid_search=False)
         if delete:
             m.delete_model()
  
@@ -29,6 +30,5 @@ def _test_lw_model(X=None, y=None, delete=False):
 
 
 if __name__ == '__main__':
-    _test_lw_model(delete=True)
-    
+    _test_lw_model(delete=False)
 

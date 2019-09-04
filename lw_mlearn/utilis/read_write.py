@@ -96,7 +96,78 @@ class Path(Desc):
         print("info: path '{}' removed... \n".format(self._x))
 
 
-class Reader():
+class Path_File():
+    '''
+    initialize descriptor path_ and file_
+    '''
+        
+    @property
+    def path_(self):
+        return self._p
+    
+    @path_.setter 
+    def path_(self, path):
+        try:
+            if not os.path.exists(path):
+                os.makedirs(path, exist_ok=True)
+                print("info: path '{}' created...".format(path))
+
+            self._p = os.path.relpath(path)
+        except Exception as e:
+            print(repr(e))
+            raise NotADirectoryError("invalid path input '%s' " % path)
+    
+    @path_.deleter
+    def path_(self):
+        for root, dirnames, file in os.walk(self._p, topdown=False):
+            for i in file:
+                os.remove(os.path.join(root, i))
+        shutil.rmtree(self._p, ignore_errors=True)
+        print("info: path '{}' removed... \n".format(self._p))        
+    
+    @property
+    def file_(self):
+        return self._f
+    
+    @file_.setter 
+    def file_(self, file):
+        if os.path.isfile(file):
+            self._f = os.path.relpath(file)
+        else:
+            raise FileNotFoundError("file '{}' does not exist".format(file))
+    
+    @file_.deleter
+    def file_(self):
+        os.remove(self._f)
+        print("info: file '{}' removed".format(self._f))
+    ## ----
+    @property
+    def newfile_(self):
+        return self._nf
+    
+    @newfile_.setter 
+    def newfile_(self, file):
+        try:
+            if os.path.isfile(file):
+                os.remove(file)
+                print("info: old file '{}' deleted...\n ".format(file))
+
+            dirs, filename = os.path.split(file)
+            if not os.path.exists(dirs) and len(dirs) > 0:
+                os.makedirs(dirs, exist_ok=True)
+                print("info: path '{}' created...\n".format(dirs))
+            self._nf = file
+        except Exception as e:
+            print(repr(e))
+            raise NotADirectoryError('invalid path input {}'.format(file))
+    
+    @newfile_.deleter
+    def newfile_(self):
+        os.remove(self._nf)
+        print("info: file '{}' removed".format(self._nf))
+    
+        
+class Reader(Path_File):
     '''read in python objects contained in files, 
     supported suffix of file are
         - ['.xlsx', '.csv', '.pkl', '.txt', '.sql']
@@ -108,14 +179,12 @@ class Reader():
     read_all:
         return generator of read in objs
     '''
-    file_ = File()
-    path_ = Path()
 
     def __init__(self, path):
         ''' init path variable 
         '''
         self.path_ = path
-
+    
     def read(self, file, **kwargs):
         '''return obj from file
         
@@ -222,7 +291,7 @@ def _rd_apis(file):
     return rst
 
 
-class Writer():
+class Writer(Path_File):
     '''write objects into file
     
     method
@@ -230,9 +299,6 @@ class Writer():
     write:
         write obj into file
     '''
-    newfile_ = NewFile()
-    path_ = Path()
-
     def __init__(self, path):
         ''' init path variable '''
         self.path_ = path
@@ -341,8 +407,11 @@ def _dump_df_csv(obj, file, index=False, **kwargs):
 def _save_plot(fig, file, **kwargs):
     '''save the figure obj , if fig is None, save the current figure
     '''
-    fig.savefig(file, **kwargs)
-
+    if hasattr(fig, 'savefig'):
+        fig.savefig(file, **kwargs)
+    else:
+        getattr(fig, 'get_figure')().savefig(file, **kwargs)
+            
 
 class Objs_management(Reader, Writer):
     def __init__(self, path):
@@ -354,6 +423,11 @@ class Objs_management(Reader, Writer):
         '''remove path and all files within
         '''
         del self.path_
+    def set_path(self, path):
+        '''set path 
+        '''
+        self.path_ = path
+        return self
 
 
 def traverse_dir(rootDir):

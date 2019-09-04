@@ -33,7 +33,8 @@ from lw_mlearn.utilis.plotter import (plotter_auc, plotter_cv_results_,
 from lw_mlearn.utilis.read_write import Objs_management
 from lw_mlearn.lw_preprocess import (pipe_main, pipe_grid, _binning, 
                             selected_fearturename,
-                            plotter_lift_curve, get_custom_scorer)
+                            plotter_lift_curve, 
+                            get_custom_scorer)
 
 class ML_model(BaseEstimator):
     '''quantifying predictions of an estimator
@@ -50,7 +51,7 @@ class ML_model(BaseEstimator):
             - positive label default 1
        
     attributes
-    -----
+    ----------
     path
         - directory to read/dump object from 
     gridcv_results
@@ -60,8 +61,13 @@ class ML_model(BaseEstimator):
     bins
         - bin edges of predictions of estimator
     
+    testscore
+        - averaged score for test set returned by run_anlysis
+    trainscore
+        - averaged score for train set returned by run_anlysis
+    
     method
-    ----
+    ---------
     cv_score:
         return cross score of estimator
     cv_validate:
@@ -172,7 +178,7 @@ class ML_model(BaseEstimator):
         return gen
 
     def _get_scorer(self, scoring):
-        ''' return sklearn scorer
+        ''' return sklearn scorer, including custom scorer
         '''
         scorer = {}
         sk_scoring = []
@@ -654,7 +660,7 @@ class ML_model(BaseEstimator):
             
         return
         ----
-        averaged train score
+        series: averaged train score for each scoring metrics
 
         '''
         L = locals().copy()
@@ -712,7 +718,7 @@ class ML_model(BaseEstimator):
         
         return
         ----
-            averaged scoring mean
+            series: averaged scoring for each of scoring metrics
         '''
         L = locals().copy()
         L.pop('self')
@@ -856,6 +862,7 @@ class ML_model(BaseEstimator):
                      cv=5,
                      grid_search=False,
                      scoring=['roc_auc', 'KS'],
+                     grid_search_only=False,
                      **kwargs):
         '''
         - run self.run_sensitivity(if grid_search=True)
@@ -865,22 +872,23 @@ class ML_model(BaseEstimator):
         '''
         if grid_search is True:
             self.run_sensitivity(train_set, scoring=scoring)
-
-        self.trainscore = self.run_train(train_set,
-                                         cv=cv,
-                                         q=q,
-                                         bins=bins,
-                                         max_leaf_nodes=max_leaf_nodes)
-        print('cv score = \n', self.trainscore, '\n')
-
-        if test_set is None:
-            print('no test_set, skip run_test method ...\n')
-        else:
-            self.testscore = self.run_test(test_set,
-                                           title=test_title,
-                                           cv=cv,
-                                           use_self_bins=True)
-            print(self.testscore, '\n')
+        
+        if not grid_search_only:
+            self.trainscore = self.run_train(train_set,
+                                             cv=cv,
+                                             q=q,
+                                             bins=bins,
+                                             max_leaf_nodes=max_leaf_nodes)
+            print('cv score = \n', self.trainscore, '\n')
+    
+            if test_set is None:
+                print('no test_set, skip run_test method ...\n')
+            else:
+                self.testscore = self.run_test(test_set,
+                                               title=test_title,
+                                               cv=cv,
+                                               use_self_bins=True)
+                print(self.testscore, '\n')
             
         self.save()
         
@@ -917,6 +925,10 @@ def run_analy(X, y, test_set=None, model_list=None, **kwargs):
     '''run analysis of a series of pre-defined models as returned by 
     get_default_estimators()
     
+    return
+    ------
+        trainscore, testscore
+        DataFrame: averaged scores for each of metrics and each of estimators
     '''
     # --
     if not os.path.exists('pre_defined_models'):
@@ -932,11 +944,20 @@ def run_analy(X, y, test_set=None, model_list=None, **kwargs):
         model = train_models(i, (X, y), test_set, **kwargs)
         print("\n '{}' complete".format(i))
         if hasattr(model, 'test_score'):
-            testscore.append(model.testscore)
+            score = model.testscore.copy()
+            score['pipe_testset'] = i
+            testscore.append(score)
         if hasattr(model, 'train_score'):
-            trainscore.append(model.trainscore)
- 
-    return
+            score = model.trianscore.copy()
+            score['pipe_trainset'] = i
+            trainscore.append(score)
+    
+    if len(trainscore) > 0:
+        trainscore = pd.concat(trainscore, axis=1, ignore_index=True).T
+    if len(testscore) > 0 :
+        testscore = pd.concat(testscore, axis=1, ignore_index=True).T
+                
+    return trainscore, testscore
 
 def run_CVscores(X=None,
                  y=None,
@@ -1090,21 +1111,24 @@ def get_default_estimators(estimators='pipe'):
     if estimators == 'pipe':
         estimators_lis = [
             # linear models
-            'cleanNA_woe_LogisticRegression',            
-            'cleanNA_woe_frf_LogisticRegression',
+            'cleanNA_woe5_LogisticRegression',            
+            'cleanNA_woe8_frf_LogisticRegression',
             'cleanNA_woeq8_cleanNN_frf_LogisticRegression',
-            'cleanNA_woe_cleanNN_frf_LogisticRegression',
-            'cleanNA_woe_frf20_LogisticRegression',
-            'cleanNA_woe_cleanNN_fRFE10log_LogisticRegression',
+            'cleanNA_woe5_cleanNN_frf_LogisticRegression',
+            'cleanNA_woe8_frf20_LogisticRegression',
+            'cleanNA_woe5_cleanNN_fRFE10log_LogisticRegression',
             
             # default SVM, grid search log/hinge/huber/perceptron
-            'cleanMean_woe_frf20_Nys_SGDClassifier',
-            'cleanMean_woe_frf20_Nys_cleanNN_SGDClassifier',
+            'cleanMean_woe5_frf20_Nys_SGDClassifier',
+            'cleanNA_woe5_frf20_Nys_cleanNN_SGDClassifier',
             'cleanMean_oht_stdscale_frf20_Nys_SGDClassifier',
+            'cleanNA_woe5_frf_LabelSpreading',
             # tree based models
             'clean_oht_XGBClassifier',
             'clean_oht_cleanNN_fxgb_XGBClassifier',
             'clean_oht_cleanNN_inlierForest_fxgb_XGBClassifier',
+            'clean_oht_cleanNN_fxgb_HistGradientBoostingClassifier',
+            
             'clean_oht_frf_RandomForestClassifier',
             'clean_oht_cleanNN_RandomForestClassifier',
             'clean_oht_fxgb_BalancedRandomForestClassifier',
@@ -1126,6 +1150,7 @@ def get_default_estimators(estimators='pipe'):
                 'RUSBoostClassifier',
                 'GradientBoostingClassifier',
                 'DecisionTreeClassifier',
-                'KNeighborsClassifier'
+                'KNeighborsClassifier',
+                'HistGradientBoostingClassifier',
                 ]
     return estimators_lis
