@@ -62,6 +62,7 @@ from imblearn.under_sampling import (
     EditedNearestNeighbours,
     AllKNN,
     InstanceHardnessThreshold,
+    ClusterCentroids
 )
 from imblearn.over_sampling import (
     ADASYN,
@@ -70,6 +71,8 @@ from imblearn.over_sampling import (
     BorderlineSMOTE,
     SVMSMOTE,
     SMOTENC,
+    KMeansSMOTE,
+    
 )
 from imblearn.ensemble import (
     EasyEnsembleClassifier,
@@ -153,6 +156,8 @@ def pipe_main(pipe=None, return_clf=False):
         BorderlineSMOTE(),
         'adasyn':
         ADASYN(),
+        'okmeans' : 
+        KMeansSMOTE(),
 
         # under sampling controlled methods
         'runder':
@@ -161,6 +166,8 @@ def pipe_main(pipe=None, return_clf=False):
         NearMiss(version=3),
         'pcart':
         InstanceHardnessThreshold(),
+        'cluster': 
+        ClusterCentroids(random_state=0) ,
 
         # under sampling cleaning methods
         'tlinks':
@@ -199,7 +206,7 @@ def pipe_main(pipe=None, return_clf=False):
         'stdscale': StandardScaler(),
         'maxscale': MinMaxScaler(),
         'rscale': RobustScaler(quantile_range=(10, 90)),
-        'qauntile': QuantileTransformer(),  # uniform distribution
+        'quantile': QuantileTransformer(),  # uniform distribution
         'power': PowerTransformer(),  # Gaussian distribution
         'norm': Normalizer(),  # default L2 norm
 
@@ -213,10 +220,10 @@ def pipe_main(pipe=None, return_clf=False):
         'spca': SparsePCA(normalize_components=True, n_jobs=-1),
         'ipca': IncrementalPCA(whiten=True),
         'kpca': KernelPCA(kernel='rbf', n_jobs=-1),
-        'poly': PolynomialFeatures(degree=2),
-        'rbf' : RBFSampler(random_state=0),
+        'poly': PolynomialFeatures(degree=2),        
         # kernel approximation
         'Nys' : Nystroem(random_state=0),
+        'rbf' : RBFSampler(random_state=0),
         'rfembedding': RandomTreesEmbedding(n_estimators=10),
         'LDA': LinearDiscriminantAnalysis(),
         'QDA': QuadraticDiscriminantAnalysis(),
@@ -295,13 +302,13 @@ def pipe_main(pipe=None, return_clf=False):
         feature_s = {}
         feature_s.update(**feature_m, **feature_u)
         return {
-            'clean': clean.keys(),
-            'encoding': encode.keys(),
-            'resample': resample.keys(),
-            'scale': scale.keys(),
-            'feature_c': feature_c.keys(),
-            'feature_s': feature_s.keys(),
-            'classifier': estimator.keys()
+            'clean': list(clean.keys()),
+            'encoding': list(encode.keys()),
+            'resample': list(resample.keys()),
+            'scale': list(scale.keys()),
+            'feature_c': list(feature_c.keys()),
+            'feature_s': list(feature_s.keys()),
+            'classifier': list(estimator.keys())
         }
     elif isinstance(pipe, str):
         l = pipe.split('_')
@@ -359,15 +366,18 @@ def _param_grid(estimator):
     '''
 
     LogisticRegression = [{'C': np.logspace(-3, 0, 8)}]
-
+ 
     SGDClassifier = [
+
         {
-            'loss': [ 'log', 'modified_huber', 'perceptron']
-        },
-        {
-            'penalty': [ 'l1', 'l2','elasticnet'],
-            'alpha' : np.logspace(-5, 0, 3)
-        },
+            'loss': [ 'log', 'hinge', 'modified_huber'],
+            'alpha' : np.logspace(-5, 0, 5)
+        }
+    ]
+    
+    LinearSVC = [
+            {'C' : np.logspace(-3, 0, 5)}
+            
     ]
     
     SVC = [{
@@ -466,11 +476,11 @@ def _param_grid(estimator):
         'n_components': np.logspace(1.2, 2, 5).astype(int)
     }, {
         'alpha': np.logspace(-1, 3, 5)
-    }]  
+    }]
     
+    # kernel approximation
     Nys = [
-            {'kernel' : ['linear', 'polynomial', 'sigmoid', 'rbf'],
-             'gamma' : np.logspace(-5, 1, 5)}, 
+            {'gamma' : np.logspace(-5, 1, 5)}, 
     ]
     
     rbf = [{
@@ -1157,6 +1167,7 @@ def _binning(y_pre=None,
         bins = np.percentile(y_pre, np.linspace(0, 100, q + 1))
         bins[0] = -np.Inf
         bins[-1] = np.Inf
+        bins = np.unique(bins)
 
     if max_leaf_nodes is not None:
         if y_true is None:

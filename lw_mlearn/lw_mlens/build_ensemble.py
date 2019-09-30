@@ -2,7 +2,7 @@
 """
 Created on Fri Aug  2 11:20:44 2019
 
-@author: BBD
+@author: roger luo
 """
 
 import pandas as pd
@@ -22,8 +22,8 @@ def get_score_fn(scoring):
     
     return
     ------
-    scoring function:
-        that accepts an array of true values and an array 
+    scoring :
+        callable function that accepts an array of true values and an array 
         of predictions: score = f(y_true, y_pred).      
     '''
     if callable(scoring):
@@ -89,15 +89,17 @@ if __name__ == '__main__':
     X.pop('NumberOfTimes90DaysLate')
     X.pop('NumberOfTime60-89DaysPastDueNotWorse')
     y = X.pop('SeriousDlqin2yrs').values
-    
+    # preprocess X
     X = pipe_main('cleanNA_woe5').fit_transform(X, y).values    
     x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.7)
-    # --
+   
+    # -- get classifers 
     esti_lst = [pipe_main(i) for i in get_default_estimators('clf')]    
     ens = build_stack(estimators=esti_lst, 
                       preprocessing=None, 
                       proba=True, 
-                      propagate_features=range(7), ens_type='stack')
+                      propagate_features=range(7), 
+                      ens_type='stack')
     ens.fit(x_train, y_train)
     y_pre = ens.predict_proba(x_test)
     roc_auc_score(y_test, y_pre[:, 1])

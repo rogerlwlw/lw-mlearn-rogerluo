@@ -4,31 +4,26 @@ Created on Mon Jun  3 14:10:59 2019
 
 @author: rogerluo
 """
-import os
 from sklearn.datasets import make_classification
+from shutil import rmtree
 
-from lw_mlearn.lw_model import get_default_estimators, train_models
+from lw_mlearn.lw_model import  run_analy
 
 def _test_lw_model(X=None, y=None, delete=False):
     '''run test of ML_model class methods through train_models function
     '''
-    # --
-    if not os.path.exists('tests_result'):
-        os.makedirs('tests_result', exist_ok=True)
-    os.chdir('tests_result')
     if  X is None or y is None: 
         X, y = make_classification(300, n_redundant=5, n_features=50)
-    l = get_default_estimators()[:2]   
-    for i in l:
-        m = train_models(i, (X, y), (X, y),
-                     max_leaf_nodes=10, scoring=['KS', 'roc_auc'], 
-                     grid_search=False)
+        
+        run_analy(X, y, (X, y), verbose=1, q=10, dirs='test_result')
         if delete:
-            m.delete_model()
- 
+            rmtree('test_result', ignore_errors=True)
     return
 
 
 if __name__ == '__main__':
     _test_lw_model(delete=False)
+#    X, y = make_classification(300, n_redundant=5, n_features=50)    
+#    run_analy(X,y, (X, y), model_list=['cleanNA_woe5_LogisticRegression'])
+
 

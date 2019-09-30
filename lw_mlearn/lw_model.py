@@ -35,6 +35,7 @@ from lw_mlearn.lw_preprocess import (pipe_main, pipe_grid, _binning,
                             selected_fearturename,
                             plotter_lift_curve, 
                             get_custom_scorer)
+from lw_mlearn.utilis.docstring import Appender, dedent
 
 class ML_model(BaseEstimator):
     '''quantifying predictions of an estimator
@@ -418,13 +419,14 @@ class ML_model(BaseEstimator):
         y_pre = self._pre_continueous(estimator, X)
 
         if use_self_bins is True:
-            if self.estimator.bins is not None:
+            if hasattr(self.estimator, 'bins'):
                 bins = self.estimator.bins
                 q = None
                 max_leaf_nodes = None
             else:
-                raise ValueError('self bins is None')
-
+                print("'self.estimator.bins' is None, no lift curve plot \n")
+                return
+            
         header = _get_estimator_name(estimator) + ' - lift curve'
         if not (title is None):
             header = ' - '.join([title, header])
@@ -680,14 +682,19 @@ class ML_model(BaseEstimator):
             X, y, **get_kwargs(self.plot_auc_traincv, **L), **fit_params)
 
         self.fit(X, y, **fit_params)
-        lift_data = self.plot_lift(X, y, **get_kwargs(self.plot_lift, **L),
-                                   **kwargs)
+        if any([max_leaf_nodes, q, bins]):
+            lift_data = self.plot_lift(X, y, **get_kwargs(self.plot_lift, **L),
+                                       **kwargs)
+            lift = lift_data[-1]
+        else:
+            lift = pd.DataFrame()
+            
 
         cv_score = self.cv_validate(X, y, **get_kwargs(self.cv_validate, **L),
                                     **kwargs)
         if self.verbose > 0:
             print('train data & cv_score & cv_splits data are being saved...')
-            folder.write([lift_data[-1], cv_score],
+            folder.write([lift, cv_score],
                          'spreadsheet/TrainPerfomance{}.xlsx'.format(title),
                          sheet_name=['liftcurve', 'train_score'])
             folder.write(traincv[-1],
@@ -767,8 +774,12 @@ class ML_model(BaseEstimator):
                     'test cv_score & cv_splits test data are being saved... ')
                 folder.write(testcv[-1],
                              file='spreadsheet/TestSplits{}.xlsx'.format(j))
+                if test_lift is None: 
+                    lift=pd.DataFrame()
+                else:
+                    lift = test_lift[-1]
                 folder.write(
-                    [test_lift[-1], scores],
+                    [lift, scores],
                     sheet_name=['lift_curve', 'test_score'],
                     file='spreadsheet/TestPerfomance{}.xlsx'.format(j))
 
@@ -859,21 +870,53 @@ class ML_model(BaseEstimator):
                      max_leaf_nodes=None,
                      q=None,
                      bins=None,
-                     cv=5,
-                     grid_search=False,
+                     cv=3,
+                     grid_search=True,                    
+                     train_test=True,
                      scoring=['roc_auc', 'KS'],
-                     grid_search_only=False,
-                     **kwargs):
+                     ):
+        '''run analysis of estimator
+        
+        1. run self.run_sensitivity(if grid_search=True)
+        2. run self.run_train,
+        3. run self.run_test,
+        4. store self trainscore & testscore
+        
+        train_set:
+            (X, y) tuple to use as train set
+        
+        test_set:
+            (X_test, y_test) tuple to use as test set
+        
+        cv:
+            n_splits for cross validation
+       
+        grid_search bool:
+            if True, perform grid_search
+        
+        train_test bool:
+            if True, perform run_train & run_test
+        
+        q
+            - number of equal frequency 
+        bins
+            - number of equal width or array of edges
+        max_leaf_nodes
+            - if not None perform supervised cutting, 
+            - number of tree nodes using tree cut        
+        .. note ::
+            either of q, bins, max_leaf_nodes can be input, if all None,
+            no lift curve plot
+        
+        return
+        ------
+            self instance
+        
         '''
-        - run self.run_sensitivity(if grid_search=True)
-        - run self.run_train 
-        - run self.run_test
-        - store self trainscore & testscore
-        '''
-        if grid_search is True:
+        if grid_search:
             self.run_sensitivity(train_set, scoring=scoring)
         
-        if not grid_search_only:
+        if train_test:
             self.trainscore = self.run_train(train_set,
                                              cv=cv,
                                              q=q,
@@ -921,19 +964,32 @@ class ML_model(BaseEstimator):
         '''
         return selected_fearturename(self.estimator)
 
-def run_analy(X, y, test_set=None, model_list=None, **kwargs):
+@dedent  
+@Appender(ML_model.run_analysis.__doc__)
+def run_analy(X, y, test_set=None, model_list=None, verbose=0, 
+              dirs='analyzed_models', **kwargs):
     '''run analysis of a series of pre-defined models as returned by 
     get_default_estimators()
     
-    return
+    dirs - str:
+        directory to dump analyzed models
+        
+    return 
     ------
-        trainscore, testscore
-        DataFrame: averaged scores for each of metrics and each of estimators
+    
+    - trainscore DataFrame 
+    - testscore  DataFrame 
+        
+        averaged scores for each of metrics and each of estimators
+    
+    **kwargs 
+        see ML_model.run_analysis() method
+    
+    Appended
+    ----
+    
     '''
     # --
-    if not os.path.exists('pre_defined_models'):
-        os.makedirs('pre_defined_models', exist_ok=True)
-    os.chdir('pre_defined_models')    
     if model_list is None:
         l = get_default_estimators()
     else:
@@ -941,14 +997,17 @@ def run_analy(X, y, test_set=None, model_list=None, **kwargs):
     trainscore = []
     testscore = []
     for i in l:
-        model = train_models(i, (X, y), test_set, **kwargs)
+        path = os.path.join(dirs, i)
+        model = ML_model(i, path, verbose=verbose)
+        model.run_analysis((X, y), test_set, **kwargs)       
+        
         print("\n '{}' complete".format(i))
-        if hasattr(model, 'test_score'):
+        if hasattr(model, 'testscore'):
             score = model.testscore.copy()
             score['pipe_testset'] = i
             testscore.append(score)
-        if hasattr(model, 'train_score'):
-            score = model.trianscore.copy()
+        if hasattr(model, 'trainscore'):
+            score = model.trainscore.copy()
             score['pipe_trainset'] = i
             trainscore.append(score)
     
@@ -988,29 +1047,6 @@ def run_CVscores(X=None,
             lis.append(scores)
         return pd.concat(lis, axis=1, ignore_index=True).T
 
-def train_models(estimator,
-                 train_set,
-                 test_set,
-                 test_title=None,
-                 max_leaf_nodes=15,
-                 verbose=1,
-                 grid_search=True,
-                 **kwargs):
-    '''run ML_model analysis for given train_set, test_set & estimator
-    
-    parameter
-    ----
-    estimator str:
-        pipe_main() input str in format of 'xx_xx_xx[_xx]', see pipe_main()
-    '''
-    model = ML_model(estimator, estimator, verbose=verbose)
-    model.run_analysis(train_set,
-                       test_set,
-                       test_title,
-                       max_leaf_nodes,
-                       grid_search=grid_search,
-                       **kwargs)
-    return model
 
 def _reset_index(*array):
     '''reset_index for df or series, return list of *arrays
@@ -1111,18 +1147,19 @@ def get_default_estimators(estimators='pipe'):
     if estimators == 'pipe':
         estimators_lis = [
             # linear models
-            'cleanNA_woe5_LogisticRegression',            
+            'cleanNA_woe5_LogisticRegression',  
+            'cleanNA_woe5_cleanNN_frf_LogisticRegression',                      
             'cleanNA_woe8_frf_LogisticRegression',
-            'cleanNA_woeq8_cleanNN_frf_LogisticRegression',
-            'cleanNA_woe5_cleanNN_frf_LogisticRegression',
+            'cleanNA_woeq8_cleanNN_frf_LogisticRegression',           
             'cleanNA_woe8_frf20_LogisticRegression',
             'cleanNA_woe5_cleanNN_fRFE10log_LogisticRegression',
+            'cleanNA_woe5_runder_LinearSVC', 
             
             # default SVM, grid search log/hinge/huber/perceptron
-            'cleanMean_woe5_frf20_Nys_SGDClassifier',
-            'cleanNA_woe5_frf20_Nys_cleanNN_SGDClassifier',
-            'cleanMean_oht_stdscale_frf20_Nys_SGDClassifier',
-            'cleanNA_woe5_frf_LabelSpreading',
+            'cleanNA_woe5_Nys_SGDClassifier',
+            'cleanNA_woe8_runder_Nys_frf_SGDClassifier',
+            'cleanMean_oht_stdscale_frf_Nys_SGDClassifier',
+            
             # tree based models
             'clean_oht_XGBClassifier',
             'clean_oht_cleanNN_fxgb_XGBClassifier',
@@ -1137,7 +1174,7 @@ def get_default_estimators(estimators='pipe'):
             'clean_oht_fxgb_cleanNN_GradientBoostingClassifier',
             'clean_oht_fsvm_cleanNN_GradientBoostingClassifier',
             'clean_oht_fxgb_DecisionTreeClassifier',
-            'clean_oht_fxgb_cleanNN_DecisionTreeClassifier',
+            'clean_oht_fxgb_runder_DecisionTreeClassifier',
         ]
     elif estimators == 'clf':
         estimators_lis = [

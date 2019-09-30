@@ -8,6 +8,7 @@ import pandas as pd
 import os
 import pickle
 import shutil
+import json
 
 from sklearn.utils import check_consistent_length
 
@@ -268,6 +269,12 @@ def _get_files(dirpath, suffix=None, subfolder=False):
     }
     return rst
 
+def _read_json(file):
+    '''return dict obj from 'json' file
+    '''
+    with open(file, 'rb') as f:
+        d = json.load(f)
+    return d
 
 def _rd_apis(file):
     '''return read api for given suffix of file, default _load_pkl will be
@@ -284,6 +291,7 @@ def _rd_apis(file):
         '.csv': pd.read_csv,
         '.txt': _read_file,
         '.sql': _read_file,
+        '.json' : _read_json ,
     }
 
     suffix = os.path.splitext(file)[1]

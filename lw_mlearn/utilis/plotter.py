@@ -114,7 +114,8 @@ def _get_snsplot(kind=None):
     return plot_func
 
 @Appender(sns.FacetGrid.__doc__, join='\nsee Facetgrid\n')
-def plotter_facet(data,  plot_args, subset=None, kind='distplot', **kwargs):
+def plotter_facet(data,  plot_args, subset=None, kind='distplot', 
+                  savefig=None, **kwargs):
     '''plot grids of plots using seaborn Facetgrid ::
     
     parameter
@@ -126,6 +127,7 @@ def plotter_facet(data,  plot_args, subset=None, kind='distplot', **kwargs):
 
     subset (dict):
         fitler subset of data by column's categorical values
+        eg: {col1 : [str1, str2, ...], ...}
         
     kind:
         callable plot fn or str to call plot api in _get_plot_fn
@@ -187,7 +189,10 @@ def plotter_facet(data,  plot_args, subset=None, kind='distplot', **kwargs):
     if len(ax_kws) > 0 :
         g.set(**ax_kws)  
     
-    g.add_legend()   
+    g.add_legend()  
+    
+    if savefig:
+        _save_fig(g, savefig)    
     return g
 
 @Appender(sns.catplot.__doc__, join='\nsee catplot\n')
@@ -611,7 +616,8 @@ def plotter_rateVol(df,
 
     return out
 
-def plotter_dist_thresh(s, step=1, thresh=53, subplot_kw=None, **fig_kws):
+def plotter_dist_thresh(s, step=1, thresh=53, subplot_kw=None, savefig=None,
+                        **fig_kws):
     '''plot distribution of series and percentage above thresh
     
     s - ndarray or series:
@@ -620,6 +626,9 @@ def plotter_dist_thresh(s, step=1, thresh=53, subplot_kw=None, **fig_kws):
         step of percentages to plot cummulative distribution
     thresh - integer:
         threshhold/cutoff of decision
+    return
+    -----
+        quantiles of data
     '''
     s = pd.Series(s)
     q = np.arange(100, step=step) / 100
@@ -635,7 +644,7 @@ def plotter_dist_thresh(s, step=1, thresh=53, subplot_kw=None, **fig_kws):
                              **fig_kws)
     # hist plot
     sns.distplot(s.dropna(), ax=axes[1], kde=False,
-                 hist_kws={'rwidth' : 0.95})
+                 hist_kws={'rwidth' : 0.9})
     # line plot
     sns.lineplot(x, y, ax=axes[0], c='green')
     fmt = get_ticks_formatter('percent', decimals=1)
@@ -657,6 +666,9 @@ def plotter_dist_thresh(s, step=1, thresh=53, subplot_kw=None, **fig_kws):
     axes[1].set_ylabel('count')
     
     plt.tight_layout()
+    
+    if savefig:
+        _save_fig(None, savefig)    
     
     return perc.reset_index()
 
@@ -836,6 +848,9 @@ def filter_subset(data, filter_con, **kwargs):
 def _save_fig(fig, file, **kwargs):
     '''save fig object to 'path' if it has 'savefig' method
     '''
+    if fig is None:
+        fig = plt.gcf()
+    
     if hasattr(fig, 'savefig'):
         fig.savefig(file, **kwargs)
     else:
@@ -898,3 +913,70 @@ def color_reference(keys=None):
         
             plt.show()
     
+# BBD plotter
+def plotter_k_status(data, savefig=None):
+    ''' calculate pass rate at different application-appraisal nodes, and 
+    plot data
+    
+    data - DataFrame (is_passed series, keys as name):
+        columns:
+            represent application-appraisal nodes name
+        values (ndarray or series):
+            represent passed applications at different nodes, binary array 
+            1 indicate pass, 0 indicate not pass
+        egg. (apply, admission, score, amount)
+   
+    return (df):
+        dataframe with columns  [nodes, rate, volume]
+        
+    '''
+
+    vol = data.sum()
+    rate = vol/vol.max()
+    
+    plot_data = pd.DataFrame({'节点': vol.index, 
+                              '百分比' : rate, 
+                              '单量' : vol})    
+    # plot       
+    plotter_rateVol(plot_data, anno=True, show_mean=False, dpi=100, 
+                    bar_c=sns.color_palette('Blues_d',n_colors=4)) 
+    
+    if savefig:
+        _save_fig(None, savefig)
+        
+    return plot_data 
+
+def plotter_timeseries_rate(data, date, freq, agg='sum', div_length=True, savefig=None):
+    '''calculate time-series aggregated data for rate and volume
+    
+    data - DataFrame:
+        columns are node labels, values are binary 1 indicate pass,
+        0 indicate not pass, egg. 
+        [apply_date, adm_pass, score_pass, amount_pass, man_pass]
+    
+    date - str:
+        column label for datetime data
+    freq:
+        frequency of datetime to aggreagte
+    agg:
+        aggregate method
+    
+    return:
+        DataFrame resampled by date freq
+    '''
+    
+    date = pd.to_datetime(date)
+    data.index = date
+    re = data.resample(freq)
+    num = getattr(re, agg)()
+    
+    if div_length:
+        num /= re.count()
+    
+    num['申请量'] = re.count().iloc[:, 0]
+    # plot
+    plotter_k_timeseries(num)
+    if savefig:
+        _save_fig(None, savefig)
+        
+    return num             

@@ -121,4 +121,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-tests/tests_result
+tests/test_result

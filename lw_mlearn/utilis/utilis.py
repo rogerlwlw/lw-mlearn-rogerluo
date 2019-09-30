@@ -31,12 +31,12 @@ def get_sk_estimators(clf, type_filter='classifier'):
             continue
     return estimator.get(clf)
 
-def join_embed_keys(dictionary):
+def join_embed_keys(dictionary, delimiter='_'):
     ''' join keys by delimiter '_' from embedding dicts, for instance:
         {k1 : {k2 : v}} to {k1_k2 : v}
     '''
     d = dictionary.copy()
-    while not all([api.is_scalar(d[k]) for k in d]):
+    while any([api.is_dict_like(d[k]) for k in d]):
         for k, v in list(d.items()):
             if api.is_dict_like(v):
                 v = d.pop(k)
