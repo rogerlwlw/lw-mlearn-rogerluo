@@ -22,7 +22,7 @@ def _test_lw_model(X=None, y=None, delete=False):
 
 
 if __name__ == '__main__':
-    _test_lw_model(delete=False)
+    _test_lw_model(delete=True)
 #    X, y = make_classification(300, n_redundant=5, n_features=50)    
 #    run_analy(X,y, (X, y), model_list=['cleanNA_woe5_LogisticRegression'])
 

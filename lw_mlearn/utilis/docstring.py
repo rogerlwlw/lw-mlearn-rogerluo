@@ -6,7 +6,8 @@ inherited from matplotlib.doctring
 
 @author: rogerluo
 """
-from matplotlib import cbook
+import inspect
+
 
 class Substitution(object):
     """
@@ -86,7 +87,7 @@ class Appender(object):
 
 def dedent(func):
     "Dedent a docstring (if present)"
-    func.__doc__ = func.__doc__ and cbook.dedent(func.__doc__)
+    func.__doc__ = func.__doc__ and inspect.cleandoc(func.__doc__)
     return func
 
 
