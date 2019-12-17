@@ -670,10 +670,10 @@ class ML_model(BaseEstimator):
         folder = self.folder
         # --
         title = title if title is not None else 0
-        if train_set is None:
-            train_set = self._get_dataset('.traindata')[0]
-        else:
-            folder.write(train_set, 'data/0.traindata')
+#        if train_set is None:
+#            train_set = self._get_dataset('.traindata')[0]
+#        else:
+#            folder.write(train_set, 'data/0.traindata')
 
         # trainning
         X = train_set[0]
@@ -744,9 +744,10 @@ class ML_model(BaseEstimator):
         else:
             title_list = [str(i) for i in range(len(test_set_list))]
         check_consistent_length(test_set_list, title_list)
-        if r == 0:
-            folder.write([test_set_list, title_list],
-                         'data/{}.testdata'.format(len(title_list)))
+        
+#        if r == 0:
+#            folder.write([test_set_list, title_list],
+#                         'data/{}.testdata'.format(len(title_list)))
 
         testscore = []
         for i, j in zip(test_set_list, title_list):
@@ -824,10 +825,10 @@ class ML_model(BaseEstimator):
         L.pop('param_grid')
         folder = self.folder
         #--
-        if train_set is None:
-            train_set = self._get_dataset('.traindata')[0]
-        else:
-            folder.write(train_set, 'data/0.traindata')
+#        if train_set is None:
+#            train_set = self._get_dataset('.traindata')[0]
+#        else:
+#            folder.write(train_set, 'data/0.traindata')
 
         if param_grid is -1:
             param_grid = []

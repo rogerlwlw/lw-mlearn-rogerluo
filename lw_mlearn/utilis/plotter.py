@@ -43,7 +43,7 @@ plt.rcParams.update({
     False,
     'font.family': ['sans-serif'],
     'font.sans-serif': [
-        'Microsoft JhengHei', # ch  
+
         'STSong', # ch
         'STXihei', # ch   
         'sans-serif',
@@ -54,6 +54,7 @@ plt.rcParams.update({
         'sans-serif',
         'DFKai-SB',
         'STKaiti',
+        'Microsoft JhengHei', # ch  
     ],
     'font.size':
     10.0,

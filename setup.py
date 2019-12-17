@@ -35,12 +35,11 @@ setup(
     "Machine learning automatic workflow based on sklearn estimator",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    license='GNU/LGPLv3',
+    license='LGPLv3',
     url='https://github.com/rogerlwlw/lw-mlearn-rogerluo',
     classifiers=[
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',

@@ -44,7 +44,7 @@ def yapf_allfile(rootdir='.',
             if os.path.splitext(file)[1] in suffix:
                 config = {
                     'based_on_style': style,
-                    'column_limit': 79,
+                    'column_limit': 80,
                     'BLANK_LINES_AROUND_TOP_LEVEL_DEFINITION': 2
                 }
                 config.update(**knobs)
